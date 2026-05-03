@@ -17,6 +17,10 @@ import {
   RadarDeltasSchema,
   type RadarDeltas,
 } from "@/lib/radar-session";
+import { archetypes, type ArchetypeId } from "@/lib/archetypes";
+
+/** Flip to `true` to expose the radar score-override panel in the top-right. */
+const DEBUG_RADAR_ENABLED = false;
 
 const useIsoLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
@@ -33,6 +37,17 @@ export function InterviewOverlay({ code }: Props) {
   sessionRef.current = session;
 
   const [input, setInput] = useState("");
+
+  // Debug — top-right panel for overriding individual archetype scores live.
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugScores, setDebugScores] = useState<
+    Partial<Record<ArchetypeId, number>>
+  >({});
+
+  const radarScores: Record<ArchetypeId, number> = {
+    ...session.state.archetypeScores,
+    ...debugScores,
+  };
 
   // Stable transport — `prepareSendMessagesRequest` runs at send time and
   // reads the latest radar snapshot via the ref so the AI gets current state.
@@ -73,12 +88,21 @@ export function InterviewOverlay({ code }: Props) {
 
   const isStreaming = chat.status === "streaming" || chat.status === "submitted";
 
-  // Auto-scroll chat to bottom on new tokens.
+  // Auto-scroll only on AI replies. When a new assistant message arrives,
+  // align its role marker (the "AI" label) to the top of the chat viewport,
+  // leaving a 4px breathing space. User messages don't trigger scroll.
+  const lastMessage = chat.messages[chat.messages.length - 1];
+  const lastAssistantId =
+    lastMessage && lastMessage.role === "assistant" ? lastMessage.id : null;
   useEffect(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [chat.messages]);
+    if (!lastAssistantId) return;
+    const container = chatScrollRef.current;
+    if (!container) return;
+    const marker = container.querySelector<HTMLElement>(
+      `[data-msg-marker="${lastAssistantId}"]`,
+    );
+    if (marker) marker.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [lastAssistantId]);
 
   // AI speaks first: when overlay mounts on a fresh session, fire an empty
   // kickoff turn so the AI delivers the bilingual welcome + CQ1 unprompted.
@@ -167,17 +191,12 @@ export function InterviewOverlay({ code }: Props) {
         }}
       >
         <section
-          ref={chatScrollRef}
           className="interview-block interview-block--chat"
-          data-lenis-prevent
           style={{
             background: "#ffffff",
-            padding: "32px 32px 24px",
-            overflow: "auto",
             minHeight: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
+            display: "grid",
+            gridTemplateRows: "auto minmax(0, 1fr)",
           }}
         >
           <header
@@ -189,6 +208,8 @@ export function InterviewOverlay({ code }: Props) {
               fontSize: 10,
               letterSpacing: 2,
               color: "var(--brand-archetypes-gray-500)",
+              padding: "20px 32px 16px",
+              borderBottom: "1px solid var(--brand-archetypes-gray-200)",
             }}
           >
             <span>SESSION</span>
@@ -196,7 +217,12 @@ export function InterviewOverlay({ code }: Props) {
           </header>
 
           <div
+            ref={chatScrollRef}
+            data-lenis-prevent
             style={{
+              overflow: "auto",
+              minHeight: 0,
+              padding: "20px 32px 80vh",
               display: "flex",
               flexDirection: "column",
               gap: 20,
@@ -310,11 +336,154 @@ export function InterviewOverlay({ code }: Props) {
         }}
       >
         <RadarChart
-          scores={session.state.archetypeScores}
+          scores={radarScores}
           primaryId={session.state.primaryId}
           size={720}
         />
       </section>
+
+      {DEBUG_RADAR_ENABLED ? (
+        <RadarDebugPanel
+          open={debugOpen}
+          onToggle={() => setDebugOpen((v) => !v)}
+          sessionScores={session.state.archetypeScores}
+          debugScores={debugScores}
+          onChange={setDebugScores}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function RadarDebugPanel({
+  open,
+  onToggle,
+  sessionScores,
+  debugScores,
+  onChange,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  sessionScores: Record<ArchetypeId, number>;
+  debugScores: Partial<Record<ArchetypeId, number>>;
+  onChange: (next: Partial<Record<ArchetypeId, number>>) => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 12,
+        right: 12,
+        zIndex: 40,
+        fontFamily: "var(--font-framework)",
+        fontSize: 10,
+        letterSpacing: 1.5,
+      }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          width: open ? 28 : 56,
+          height: 28,
+          background: open
+            ? "var(--brand-archetypes-red)"
+            : "var(--brand-archetypes-black)",
+          color: "#fff",
+          border: "none",
+          cursor: "pointer",
+          fontFamily: "var(--font-framework)",
+          fontSize: 11,
+          letterSpacing: 1.5,
+        }}
+      >
+        {open ? "×" : "DBG"}
+      </button>
+      {open ? (
+        <div
+          style={{
+            marginTop: 6,
+            background: "var(--brand-archetypes-black)",
+            color: "var(--brand-archetypes-white)",
+            padding: 14,
+            width: 280,
+            maxHeight: "calc(100dvh - 64px)",
+            overflow: "auto",
+            border: "1px solid var(--brand-archetypes-white)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+            }}
+          >
+            <span style={{ opacity: 0.6 }}>RADAR · SCORES</span>
+            <button
+              type="button"
+              onClick={() => onChange({})}
+              style={{
+                background: "transparent",
+                color: "var(--brand-archetypes-white)",
+                border: "1px solid rgba(255,255,255,0.4)",
+                padding: "2px 8px",
+                fontFamily: "var(--font-framework)",
+                fontSize: 9,
+                letterSpacing: 1,
+                cursor: "pointer",
+              }}
+            >
+              RESET
+            </button>
+          </div>
+
+          {archetypes.map((a) => {
+            const live = sessionScores[a.id] ?? 0;
+            const override = debugScores[a.id];
+            const value = override ?? live;
+            const isOverridden = override !== undefined;
+            return (
+              <div
+                key={a.id}
+                style={{ display: "flex", flexDirection: "column", gap: 3 }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 10,
+                    opacity: isOverridden ? 1 : 0.7,
+                    color: isOverridden
+                      ? "var(--brand-archetypes-red)"
+                      : "var(--brand-archetypes-white)",
+                  }}
+                >
+                  <span>{a.nameEn.toUpperCase()}</span>
+                  <span>{value.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={value}
+                  onChange={(e) =>
+                    onChange({
+                      ...debugScores,
+                      [a.id]: parseFloat(e.target.value),
+                    })
+                  }
+                  style={{ width: "100%", accentColor: "#e53935" }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -356,11 +525,13 @@ function MessageBlock({ message }: { message: UIMessage }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div
+        data-msg-marker={message.id}
         style={{
           fontFamily: "var(--font-framework)",
           fontSize: 9,
           letterSpacing: 2,
           color: "var(--brand-archetypes-gray-500)",
+          scrollMarginTop: 4,
         }}
       >
         {isUser ? "YOU" : "AI"}
@@ -384,7 +555,7 @@ function MessageBlock({ message }: { message: UIMessage }) {
             <div
               style={{
                 fontFamily: "var(--font-body-en)",
-                fontSize: 14,
+                fontSize: 13,
                 lineHeight: 1.65,
                 color: "var(--brand-archetypes-gray-500)",
                 whiteSpace: "pre-wrap",
@@ -396,11 +567,11 @@ function MessageBlock({ message }: { message: UIMessage }) {
           {question ? (
             <div
               style={{
-                paddingLeft: 14,
+                paddingLeft: 12,
                 borderLeft: "2px solid var(--brand-archetypes-red)",
                 fontFamily: "var(--font-body-en)",
-                fontSize: 18,
-                lineHeight: 1.45,
+                fontSize: 14,
+                lineHeight: 1.55,
                 fontWeight: 600,
                 color: "var(--brand-archetypes-black)",
                 whiteSpace: "pre-wrap",

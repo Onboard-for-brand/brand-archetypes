@@ -8,6 +8,13 @@ import {
   type ArchetypeScores,
 } from "@/lib/archetypes";
 
+export interface RadarGradientStop {
+  /** 0..100 — distance from chart center as % of `maxR`. */
+  offset: number;
+  /** 0..1 — alpha at this offset. Color is always `--brand-archetypes-red`. */
+  opacity: number;
+}
+
 interface Props {
   scores: ArchetypeScores;
   /** Score >= threshold flips a node to active (red). */
@@ -16,10 +23,18 @@ interface Props {
   primaryId?: ArchetypeId | null;
   /** Pixel size — chart is square. */
   size?: number;
+  /** Override the polygon fill gradient stops (debug / theming). */
+  gradientStops?: RadarGradientStop[];
   className?: string;
 }
 
 const RING_FRACTIONS = [0.33, 0.66, 1.0];
+
+const DEFAULT_GRADIENT_STOPS: RadarGradientStop[] = [
+  { offset: 0, opacity: 0 },
+  { offset: 35, opacity: 0.12 },
+  { offset: 100, opacity: 0.42 },
+];
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -53,6 +68,7 @@ export function RadarChart({
   threshold = 0.3,
   primaryId = null,
   size = 480,
+  gradientStops = DEFAULT_GRADIENT_STOPS,
   className,
 }: Props) {
   const cx = size / 2;
@@ -93,8 +109,7 @@ export function RadarChart({
         aria-label="Archetype composition radar"
       >
         <defs>
-          {/* center fully transparent → edge translucent red.
-              CSS variables only resolve in SVG `stop-color` when set via
+          {/* CSS variables only resolve in SVG `stop-color` when set via
               `style`, NOT via the bare attribute. */}
           <radialGradient
             id={fillId}
@@ -103,18 +118,16 @@ export function RadarChart({
             cy={r(cy)}
             r={r(maxR)}
           >
-            <stop
-              offset="0%"
-              style={{ stopColor: "var(--brand-archetypes-red)", stopOpacity: 0 }}
-            />
-            <stop
-              offset="35%"
-              style={{ stopColor: "var(--brand-archetypes-red)", stopOpacity: 0.12 }}
-            />
-            <stop
-              offset="100%"
-              style={{ stopColor: "var(--brand-archetypes-red)", stopOpacity: 0.42 }}
-            />
+            {gradientStops.map((s, i) => (
+              <stop
+                key={i}
+                offset={`${s.offset}%`}
+                style={{
+                  stopColor: "var(--brand-archetypes-red)",
+                  stopOpacity: s.opacity,
+                }}
+              />
+            ))}
           </radialGradient>
         </defs>
 
