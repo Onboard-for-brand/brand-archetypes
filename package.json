@@ -14,9 +14,12 @@
     "hash": "bun --env-file=.env.local run scripts/hash-password.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.74",
+    "@ai-sdk/react": "^3.0.176",
     "@gsap/react": "^2.1.2",
     "@neondatabase/serverless": "^1.1.0",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "ai": "^6.0.174",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",

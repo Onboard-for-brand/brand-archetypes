@@ -16,6 +16,7 @@ import { archetypes } from "@/lib/archetypes";
 
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { HowToGetPanel } from "./HowToGetPanel";
+import { InterviewOverlay } from "./InterviewOverlay";
 
 type TestEntryState = "idle" | "access" | "verified";
 
@@ -87,21 +88,29 @@ export default function Home() {
       return Math.max(0, cta.getBoundingClientRect().top + window.scrollY);
     }
 
-    function isInsideHowToGetPanel(event: Event): boolean {
+    function isInsideScrollAllowList(event: Event): boolean {
       const path =
         typeof (event as Event & { composedPath?: () => EventTarget[] })
           .composedPath === "function"
           ? (event as Event & { composedPath: () => EventTarget[] }).composedPath()
           : [];
-      return path.some(
-        (node) =>
-          node instanceof HTMLElement &&
-          node.classList.contains("how-to-get-panel"),
-      );
+      return path.some((node) => {
+        if (!(node instanceof HTMLElement)) return false;
+        // Editable fields — never swallow keys/scroll inside them.
+        const tag = node.tagName;
+        if (tag === "TEXTAREA" || tag === "INPUT" || node.isContentEditable) {
+          return true;
+        }
+        return (
+          node.classList.contains("how-to-get-panel") ||
+          node.classList.contains("interview-block--chat") ||
+          node.classList.contains("interview-block--input")
+        );
+      });
     }
 
     function preventLockedScroll(event: Event) {
-      if (isInsideHowToGetPanel(event)) return;
+      if (isInsideScrollAllowList(event)) return;
       event.preventDefault();
     }
 
@@ -109,7 +118,7 @@ export default function Home() {
       if (!scrollKeys.has(event.key)) {
         return;
       }
-      if (isInsideHowToGetPanel(event)) return;
+      if (isInsideScrollAllowList(event)) return;
       event.preventDefault();
     }
 
@@ -1097,30 +1106,11 @@ export default function Home() {
               className={`cta-form-layer ${showRevealed ? "is-active" : ""}`}
               aria-hidden={!showRevealed}
             >
-              {testEntryState === "verified" ? (
-                <div className="cta-form-content">
-                  <div className="cta-form-eyebrow">
-                    ACCESS PROTOCOL{" "}
-                    <span className="cta-form-eyebrow__sep">{"///"}</span>{" "}
-                    COMPLETE
-                  </div>
-                  <h2 className="cta-form-headline">VERIFIED</h2>
-                  <div className="cta-form-meta">
-                    <p>
-                      CODE{" "}
-                      <span className="cta-form-meta__sep">{"///"}</span>{" "}
-                      <strong>{verifiedCode}</strong>
-                    </p>
-                    <p className="cta-form-meta__faded">
-                      BACKEND HANDOFF PENDING
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <form
-                  className="cta-form-content"
-                  onSubmit={submitAccessCode}
-                >
+              <form
+                className="cta-form-content"
+                onSubmit={submitAccessCode}
+                autoComplete="off"
+              >
                   <div className="cta-form-eyebrow">
                     ACCESS PROTOCOL{" "}
                     <span className="cta-form-eyebrow__sep">{"///"}</span>{" "}
@@ -1133,6 +1123,8 @@ export default function Home() {
                     <input
                       ref={accessInputRef}
                       className="cta-form-input"
+                      type="text"
+                      name="access-protocol-code"
                       value={accessCode}
                       onChange={(event) =>
                         handleAccessCodeChange(event.target.value)
@@ -1140,7 +1132,12 @@ export default function Home() {
                       placeholder="XXXX - XXXX - XXXX"
                       maxLength={14}
                       autoCapitalize="characters"
+                      autoComplete="off"
+                      autoCorrect="off"
                       spellCheck={false}
+                      data-1p-ignore="true"
+                      data-lpignore="true"
+                      data-form-type="other"
                       disabled={!isTestEntryActive || isVerifying}
                     />
                   </label>
@@ -1215,8 +1212,7 @@ export default function Home() {
                       )}
                     </button>
                   </div>
-                </form>
-              )}
+              </form>
             </div>
           </div>
 
@@ -1250,6 +1246,9 @@ export default function Home() {
         open={showHowToGet}
         onClose={() => setShowHowToGet(false)}
       />
+      {testEntryState === "verified" ? (
+        <InterviewOverlay code={verifiedCode} />
+      ) : null}
     </div>
   );
 }

@@ -4,13 +4,13 @@ import { motion } from "motion/react";
 import { useState, type SVGProps } from "react";
 import { popSpring } from "@/components/ui/motion";
 import { cn } from "@/lib/cn";
-import type { OpenRouterModel } from "@/lib/openrouter";
+import type { AIModel } from "@/lib/ai-models";
 
 export function SettingsClient({
   models,
   activeModel,
 }: {
-  models: OpenRouterModel[];
+  models: AIModel[];
   activeModel: string;
 }) {
   const [selected, setSelected] = useState(activeModel);
@@ -80,7 +80,7 @@ export function SettingsClient({
               Could not load model catalog
             </p>
             <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
-              OpenRouter request failed. Refresh to retry.
+              Failed to load models. Refresh to retry.
             </p>
           </div>
         ) : (
@@ -109,7 +109,7 @@ function ModelCard({
   isSaving,
   onSelect,
 }: {
-  model: OpenRouterModel;
+  model: AIModel;
   index: number;
   isActive: boolean;
   isSaving: boolean;

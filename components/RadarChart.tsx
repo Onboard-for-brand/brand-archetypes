@@ -93,7 +93,9 @@ export function RadarChart({
         aria-label="Archetype composition radar"
       >
         <defs>
-          {/* center fully transparent → edge translucent red */}
+          {/* center fully transparent → edge translucent red.
+              CSS variables only resolve in SVG `stop-color` when set via
+              `style`, NOT via the bare attribute. */}
           <radialGradient
             id={fillId}
             gradientUnits="userSpaceOnUse"
@@ -101,9 +103,18 @@ export function RadarChart({
             cy={r(cy)}
             r={r(maxR)}
           >
-            <stop offset="0%" stopColor="var(--brand-archetypes-red)" stopOpacity="0" />
-            <stop offset="55%" stopColor="var(--brand-archetypes-red)" stopOpacity="0.08" />
-            <stop offset="100%" stopColor="var(--brand-archetypes-red)" stopOpacity="0.28" />
+            <stop
+              offset="0%"
+              style={{ stopColor: "var(--brand-archetypes-red)", stopOpacity: 0 }}
+            />
+            <stop
+              offset="35%"
+              style={{ stopColor: "var(--brand-archetypes-red)", stopOpacity: 0.12 }}
+            />
+            <stop
+              offset="100%"
+              style={{ stopColor: "var(--brand-archetypes-red)", stopOpacity: 0.42 }}
+            />
           </radialGradient>
         </defs>
 
