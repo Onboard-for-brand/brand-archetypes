@@ -15,6 +15,7 @@ import {
 import { archetypes } from "@/lib/archetypes";
 
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { HowToGetPanel } from "./HowToGetPanel";
 
 type TestEntryState = "idle" | "access" | "verified";
 
@@ -32,7 +33,10 @@ export default function Home() {
   const [verifiedCode, setVerifiedCode] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [isEntryTransitioning, setIsEntryTransitioning] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
   const [isPageLoaded, setIsPageLoaded] = useState(false);
+  const [showHowToGet, setShowHowToGet] = useState(false);
+  const [expandedPhase, setExpandedPhase] = useState<string | null>(null);
 
   // Refs for Loader
   const loaderRef = useRef<HTMLDivElement>(null);
@@ -44,7 +48,10 @@ export default function Home() {
   const hoverImgRef = useRef<HTMLImageElement>(null);
   const gallerySectionRef = useRef<HTMLDivElement>(null);
   const isTestEntryActive = testEntryState !== "idle";
-  const isEntryLocked = isTestEntryActive || isEntryTransitioning;
+  const isEntryLocked = isTestEntryActive || isEntryTransitioning || isExiting;
+  const showEngaged = isEntryLocked && !isExiting;
+  const showWarping = isEntryTransitioning || isExiting;
+  const showRevealed = isTestEntryActive && !isExiting;
 
   useEffect(() => {
     return () => {
@@ -80,7 +87,21 @@ export default function Home() {
       return Math.max(0, cta.getBoundingClientRect().top + window.scrollY);
     }
 
+    function isInsideHowToGetPanel(event: Event): boolean {
+      const path =
+        typeof (event as Event & { composedPath?: () => EventTarget[] })
+          .composedPath === "function"
+          ? (event as Event & { composedPath: () => EventTarget[] }).composedPath()
+          : [];
+      return path.some(
+        (node) =>
+          node instanceof HTMLElement &&
+          node.classList.contains("how-to-get-panel"),
+      );
+    }
+
     function preventLockedScroll(event: Event) {
+      if (isInsideHowToGetPanel(event)) return;
       event.preventDefault();
     }
 
@@ -88,7 +109,7 @@ export default function Home() {
       if (!scrollKeys.has(event.key)) {
         return;
       }
-
+      if (isInsideHowToGetPanel(event)) return;
       event.preventDefault();
     }
 
@@ -575,6 +596,41 @@ export default function Home() {
     window.requestAnimationFrame(activate);
   }
 
+  function exitAccessMode() {
+    if (!isTestEntryActive || isExiting || isEntryTransitioning) return;
+
+    setIsExiting(true);
+
+    if (entryTransitionTimerRef.current) {
+      window.clearTimeout(entryTransitionTimerRef.current);
+    }
+
+    entryTransitionTimerRef.current = window.setTimeout(() => {
+      setTestEntryState("idle");
+      setAccessCode("");
+      setAccessError("");
+      setVerifiedCode("");
+      setIsExiting(false);
+      entryTransitionTimerRef.current = null;
+    }, 720);
+  }
+
+  useEffect(() => {
+    if (!isTestEntryActive) return;
+
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        exitAccessMode();
+      }
+    }
+
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTestEntryActive, isExiting, isEntryTransitioning]);
+
   function handleAccessCodeChange(value: string) {
     setAccessCode(formatAccessCode(value));
 
@@ -795,26 +851,135 @@ export default function Home() {
               {/* The Technical List */}
               <div className="w-full border-t border-white/10">
                 {[
-                  { phase: "01", name: "ROOT", q: "16 Qs" },
-                  { phase: "02", name: "TRUNK", q: "13 Qs" },
-                  { phase: "03", name: "BARK", q: "4 Qs" },
-                  { phase: "04", name: "CANOPY", q: "9 Qs" },
-                ].map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between items-center py-8 border-b border-white/10 hover:bg-white/5 transition-colors duration-300 scroll-fade-up group cursor-default px-4"
-                  >
-                    <span className="font-mono text-sm text-[#666]">
-                      {item.phase}
-                    </span>
-                    <span className="text-3xl md:text-5xl font-bold uppercase group-hover:text-[#e53935] transition-colors duration-300">
-                      {item.name}
-                    </span>
-                    <span className="font-mono text-sm text-[#e0e0e0]">
-                      {item.q}
-                    </span>
-                  </div>
-                ))}
+                  {
+                    phase: "01",
+                    name: "ROOT",
+                    nameZh: "根系",
+                    range: "Q1 — Q16",
+                    count: "16 questions",
+                    countZh: "16 题",
+                    q: "16 Qs",
+                    descEn:
+                      "North Star, identity positioning, internal structure. The deepest excavation.",
+                    descZh:
+                      "北极星、身份定位、内部结构。最深的挖掘。",
+                  },
+                  {
+                    phase: "02",
+                    name: "TRUNK",
+                    nameZh: "枝干",
+                    range: "Q17 — Q29",
+                    count: "13 questions",
+                    countZh: "13 题",
+                    q: "13 Qs",
+                    descEn:
+                      "Beliefs and expression. How conviction becomes voice.",
+                    descZh: "信念与表达。确信如何变成声音。",
+                  },
+                  {
+                    phase: "03",
+                    name: "BARK",
+                    nameZh: "树皮",
+                    range: "Q30 — Q33",
+                    count: "4 questions",
+                    countZh: "4 题",
+                    q: "4 Qs",
+                    descEn:
+                      "Taste immune system. What you reject is who you are.",
+                    descZh:
+                      "品味免疫系统。你拒绝什么，定义了你是谁。",
+                  },
+                  {
+                    phase: "04",
+                    name: "CANOPY",
+                    nameZh: "树冠",
+                    range: "Q34 — Q42",
+                    count: "9 questions",
+                    countZh: "9 题",
+                    q: "9 Qs",
+                    descEn:
+                      "Content architecture and integration. The visible canopy.",
+                    descZh: "内容架构与整合。可见的树冠。",
+                  },
+                ].map((item) => {
+                  const isOpen = expandedPhase === item.name;
+                  return (
+                    <div
+                      key={item.name}
+                      className="border-b border-white/10 scroll-fade-up"
+                    >
+                      <button
+                        type="button"
+                        aria-expanded={isOpen}
+                        onClick={() =>
+                          setExpandedPhase(isOpen ? null : item.name)
+                        }
+                        className={`group flex w-full items-center justify-between px-4 py-8 transition-colors duration-300 cursor-pointer ${
+                          isOpen ? "bg-white/[0.04]" : "hover:bg-white/5"
+                        }`}
+                      >
+                        <span className="font-mono text-sm text-[#666]">
+                          {item.phase}
+                        </span>
+                        <span
+                          className={`text-3xl md:text-5xl font-bold uppercase transition-colors duration-300 ${
+                            isOpen
+                              ? "text-[#e53935]"
+                              : "group-hover:text-[#e53935]"
+                          }`}
+                        >
+                          {item.name}
+                        </span>
+                        <span className="flex items-center gap-3 font-mono text-sm text-[#e0e0e0]">
+                          <span>{item.q}</span>
+                          <span
+                            aria-hidden="true"
+                            className={`inline-block text-lg leading-none transition-transform duration-500 ease-[cubic-bezier(0.86,0,0.07,1)] ${
+                              isOpen
+                                ? "rotate-45 text-[#e53935]"
+                                : "text-[#666] group-hover:text-[#e0e0e0]"
+                            }`}
+                          >
+                            +
+                          </span>
+                        </span>
+                      </button>
+                      <div
+                        className="grid transition-[grid-template-rows] duration-500 ease-[cubic-bezier(0.86,0,0.07,1)]"
+                        style={{
+                          gridTemplateRows: isOpen ? "1fr" : "0fr",
+                        }}
+                      >
+                        <div className="overflow-hidden">
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 px-4 pb-10 pt-2">
+                            <div className="md:col-span-3 font-mono text-xs uppercase tracking-widest text-[#666]">
+                              <span className="text-[#e0e0e0] text-base normal-case tracking-normal">
+                                <I18nText
+                                  zh={item.nameZh}
+                                  en={item.name.charAt(0) + item.name.slice(1).toLowerCase()}
+                                />
+                              </span>
+                              <span className="block mt-2">
+                                {item.range}{" "}
+                                <span className="text-[#e53935]">·</span>{" "}
+                                <I18nText
+                                  zh={item.countZh}
+                                  en={item.count}
+                                />
+                              </span>
+                            </div>
+                            <div className="md:col-span-9 text-base md:text-lg text-[#a0a0a0] leading-relaxed">
+                              <I18nText
+                                zh={item.descZh}
+                                en={item.descEn}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -911,9 +1076,9 @@ export default function Home() {
             </div>
 
             <div
-              className={`cta-stage ${isEntryLocked ? "is-engaged" : ""} ${
-                isEntryTransitioning ? "is-warping" : ""
-              } ${isTestEntryActive ? "is-revealed" : ""}`}
+              className={`cta-stage ${showEngaged ? "is-engaged" : ""} ${
+                showWarping ? "is-warping" : ""
+              } ${showRevealed ? "is-revealed" : ""}`}
             >
               <button
                 type="button"
@@ -929,10 +1094,8 @@ export default function Home() {
             </div>
 
             <div
-              className={`cta-form-layer ${
-                isTestEntryActive ? "is-active" : ""
-              }`}
-              aria-hidden={!isTestEntryActive}
+              className={`cta-form-layer ${showRevealed ? "is-active" : ""}`}
+              aria-hidden={!showRevealed}
             >
               {testEntryState === "verified" ? (
                 <div className="cta-form-content">
@@ -961,7 +1124,7 @@ export default function Home() {
                   <div className="cta-form-eyebrow">
                     ACCESS PROTOCOL{" "}
                     <span className="cta-form-eyebrow__sep">{"///"}</span>{" "}
-                    <I18nText zh="校验码" en="ACCESS CODE" />
+                    <I18nText zh="校验码" en="CODE" />
                   </div>
                   <label className="cta-form-field">
                     <span className="sr-only">
@@ -1013,6 +1176,26 @@ export default function Home() {
                           )}
                         </p>
                       ) : null}
+                      <button
+                        type="button"
+                        className="cta-form-help"
+                        onClick={() => setShowHowToGet(true)}
+                      >
+                        <I18nText zh="如何获取访问码" en="How to get one" />
+                      </button>
+                      <p className="cta-form-meta">
+                        <I18nText
+                          zh="下载完整的 42 题提示文件。在你自己的 Claude Cowork 或 Claude Code 中使用 — 无需注册，无需邮箱。"
+                          en="Get the full 42-question prompt file. Use it in your own Claude Cowork or Claude Code environment — no sign-up, no email gate."
+                        />
+                      </p>
+                      <a
+                        href="/brand-archetypes-v5.md"
+                        download
+                        className="cta-form-help cta-form-help--download"
+                      >
+                        <I18nText zh="下载 .md" en="Download .md" />
+                      </a>
                     </div>
                     <button
                       className="cta-form-submit"
@@ -1063,6 +1246,10 @@ export default function Home() {
         </section>
       </main>
       {isEntryLocked ? null : <EdupunkBounceFooter />}
+      <HowToGetPanel
+        open={showHowToGet}
+        onClose={() => setShowHowToGet(false)}
+      />
     </div>
   );
 }
