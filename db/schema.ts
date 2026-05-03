@@ -41,3 +41,13 @@ export const accessCodes = pgTable(
 
 export type AccessCode = typeof accessCodes.$inferSelect;
 export type NewAccessCode = typeof accessCodes.$inferInsert;
+
+export const appSettings = pgTable("app_settings", {
+  key: varchar("key", { length: 64 }).primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
+export type AppSetting = typeof appSettings.$inferSelect;

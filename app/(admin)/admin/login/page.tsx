@@ -18,25 +18,19 @@ export default async function AdminLoginPage({ searchParams }: PageProps) {
   return (
     <main className="flex min-h-dvh items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-2 text-center">
-          <div className="flex size-9 items-center justify-center rounded-md bg-[var(--color-fg)] text-[var(--color-surface)]">
-            <span className="font-mono text-sm font-semibold">OB</span>
-          </div>
-          <h1 className="text-base font-semibold tracking-tight">
-            Sign in to Admin
-          </h1>
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            Onboarding for Brand · Console
-          </p>
+        <div className="mb-8 flex justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.svg"
+            alt="Onboarding for Brand"
+            className="h-7 w-auto select-none"
+            draggable={false}
+          />
         </div>
 
         <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
           <LoginForm next={next} />
         </div>
-
-        <p className="mt-6 text-center text-xs text-[var(--color-fg-subtle)]">
-          Authorized personnel only.
-        </p>
       </div>
     </main>
   );

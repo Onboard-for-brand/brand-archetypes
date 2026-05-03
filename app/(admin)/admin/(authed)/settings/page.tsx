@@ -1,12 +1,14 @@
-export default function SettingsPage() {
-  return (
-    <div className="px-8 py-10">
-      <header className="border-b border-[var(--color-border)] pb-6">
-        <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
-          Configuration
-        </p>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">Settings</h1>
-      </header>
-    </div>
-  );
+import { fetchAnthropicModels, type OpenRouterModel } from "@/lib/openrouter";
+import { getActiveModel } from "@/lib/settings";
+import { SettingsClient } from "./SettingsClient";
+
+export const dynamic = "force-dynamic";
+
+export default async function SettingsPage() {
+  const [models, activeModel] = await Promise.all([
+    fetchAnthropicModels().catch((): OpenRouterModel[] => []),
+    getActiveModel(),
+  ]);
+
+  return <SettingsClient models={models} activeModel={activeModel} />;
 }

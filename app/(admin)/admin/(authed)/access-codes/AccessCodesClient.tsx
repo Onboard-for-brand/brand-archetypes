@@ -17,6 +17,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Kbd } from "@/components/ui/kbd";
 import { MagneticButton } from "@/components/ui/magnetic";
 import { popSpring, sheetSpring } from "@/components/ui/motion";
 import { NumberTicker } from "@/components/ui/number-ticker";
@@ -86,6 +87,29 @@ export function AccessCodesClient({
     completed: codes.filter((c) => c.status === "completed").length,
   };
 
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key.toLowerCase() !== "c") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey)
+        return;
+      if (isDialogOpen) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      setIsDialogOpen(true);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isDialogOpen]);
+
   async function copyToClipboard(code: string) {
     try {
       await navigator.clipboard.writeText(code);
@@ -143,10 +167,13 @@ export function AccessCodesClient({
         <MagneticButton
           type="button"
           onClick={() => setIsDialogOpen(true)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--color-fg)] px-3.5 text-sm font-medium text-[var(--color-surface)] transition-colors hover:bg-[oklch(0.28_0_0)]"
+          className="inline-flex h-9 items-center gap-2 rounded-md bg-[var(--color-fg)] pl-3.5 pr-2 text-sm font-medium text-[var(--color-surface)] transition-colors hover:bg-[oklch(0.28_0_0)]"
         >
           <PlusIcon className="size-3.5" />
           New code
+          <Kbd variant="dark" aria-label="Shortcut: C">
+            C
+          </Kbd>
         </MagneticButton>
       </header>
 
@@ -347,7 +374,11 @@ function CodesTable({
                   <RelativeTime value={row.createdAt} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right">
-                  {isRevoked ? null : (
+                  {isRevoked ? (
+                    <span className="text-[12px] text-[var(--color-fg-subtle)]/50">
+                      —
+                    </span>
+                  ) : (
                     <button
                       type="button"
                       onClick={() => onStatusChange(row.code, "revoked")}
@@ -438,10 +469,13 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <MagneticButton
         type="button"
         onClick={onCreate}
-        className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-md bg-[var(--color-fg)] px-3 text-xs font-medium text-[var(--color-surface)] transition-colors hover:bg-[oklch(0.28_0_0)]"
+        className="mt-4 inline-flex h-8 items-center gap-2 rounded-md bg-[var(--color-fg)] pl-3 pr-1.5 text-xs font-medium text-[var(--color-surface)] transition-colors hover:bg-[oklch(0.28_0_0)]"
       >
         <PlusIcon className="size-3" />
         Issue code
+        <Kbd variant="dark" aria-label="Shortcut: C">
+          C
+        </Kbd>
       </MagneticButton>
     </div>
   );
@@ -458,11 +492,19 @@ function NewCodeDialog({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     noteRef.current?.focus();
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        formRef.current?.requestSubmit();
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -522,7 +564,11 @@ function NewCodeDialog({
         transition={sheetSpring}
         className="relative w-full max-w-md overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.25),0_4px_8px_rgba(0,0,0,0.04)]"
       >
-        <form onSubmit={handleSubmit} className="flex flex-col">
+        <form
+          ref={formRef}
+          onSubmit={handleSubmit}
+          className="flex flex-col"
+        >
           <div className="border-b border-[var(--color-border)] px-5 py-4">
             <h2
               id="new-code-title"
@@ -582,9 +628,12 @@ function NewCodeDialog({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex h-8 items-center rounded-md bg-[var(--color-fg)] px-3 text-xs font-medium text-[var(--color-surface)] transition-colors hover:bg-[oklch(0.28_0_0)] disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-2 rounded-md bg-[var(--color-fg)] pl-3 pr-1.5 text-xs font-medium text-[var(--color-surface)] transition-colors hover:bg-[oklch(0.28_0_0)] disabled:opacity-50"
             >
               {isSubmitting ? "Creating…" : "Create code"}
+              <Kbd variant="dark" aria-label="Shortcut: Cmd Enter">
+                ⌘↵
+              </Kbd>
             </button>
           </div>
         </form>
