@@ -12,11 +12,25 @@ export type ArchetypeId =
   | "everyman"
   | "caregiver";
 
+export type ArchetypeQuadrant =
+  | "stability-belonging"
+  | "stability-independence"
+  | "mastery-independence"
+  | "mastery-belonging";
+
 export interface Archetype {
   id: ArchetypeId;
   nameEn: string;
   nameZh: string;
+  /** Free-form display string used by the existing gallery / listing UI. */
   quadrant: string;
+  /** Structured quadrant tag used by the radar. */
+  quadrantTag: ArchetypeQuadrant;
+  /** Position on the radar, 0-indexed from 12 o'clock, going clockwise. */
+  position: number;
+  motto: string;
+  desire: string;
+  fear: string;
   avatar: string;
 }
 
@@ -26,6 +40,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Ruler",
     nameZh: "统治者",
     quadrant: "Stability / Belonging",
+    quadrantTag: "stability-belonging",
+    position: 0,
+    motto: "Power isn't everything. It's the only thing.",
+    desire: "Stability and control",
+    fear: "Chaos, being overthrown",
     avatar: "/archetypes/archetype-ruler.png",
   },
   {
@@ -33,6 +52,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Creator",
     nameZh: "创造者",
     quadrant: "Stability / Independence",
+    quadrantTag: "stability-independence",
+    position: 1,
+    motto: "If it can be imagined, it can be created.",
+    desire: "To create things of enduring value",
+    fear: "Mediocrity, lack of vision",
     avatar: "/archetypes/archetype-creator.png",
   },
   {
@@ -40,6 +64,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Innocent",
     nameZh: "纯真者",
     quadrant: "Stability / Independence",
+    quadrantTag: "stability-independence",
+    position: 2,
+    motto: "Free to be you and me.",
+    desire: "Paradise, simple goodness",
+    fear: "Punishment for doing wrong",
     avatar: "/archetypes/archetype-innocent.png",
   },
   {
@@ -47,6 +76,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Sage",
     nameZh: "智者",
     quadrant: "Stability / Independence",
+    quadrantTag: "stability-independence",
+    position: 3,
+    motto: "The truth will set you free.",
+    desire: "To find truth",
+    fear: "Being deceived, ignorance",
     avatar: "/archetypes/archetype-sage.png",
   },
   {
@@ -54,6 +88,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Explorer",
     nameZh: "探索者",
     quadrant: "Mastery / Independence",
+    quadrantTag: "mastery-independence",
+    position: 4,
+    motto: "Don't fence me in.",
+    desire: "Freedom, authentic experience",
+    fear: "Being trapped, conformity",
     avatar: "/archetypes/archetype-explorer.png",
   },
   {
@@ -61,6 +100,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Magician",
     nameZh: "魔术师",
     quadrant: "Mastery / Independence",
+    quadrantTag: "mastery-independence",
+    position: 5,
+    motto: "It can happen.",
+    desire: "To understand the laws of the universe",
+    fear: "Unintended consequences",
     avatar: "/archetypes/archetype-magician.png",
   },
   {
@@ -68,6 +112,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Rebel",
     nameZh: "反叛者",
     quadrant: "Mastery / Independence",
+    quadrantTag: "mastery-independence",
+    position: 6,
+    motto: "Rules are meant to be broken.",
+    desire: "Liberation, revolution",
+    fear: "Powerlessness, irrelevance",
     avatar: "/archetypes/archetype-rebel.png",
   },
   {
@@ -75,6 +124,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Hero",
     nameZh: "英雄",
     quadrant: "Mastery / Independence",
+    quadrantTag: "mastery-independence",
+    position: 7,
+    motto: "Where there's a will, there's a way.",
+    desire: "To prove worth through courageous action",
+    fear: "Cowardice, weakness",
     avatar: "/archetypes/archetype-hero.png",
   },
   {
@@ -82,6 +136,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Jester",
     nameZh: "乐子人",
     quadrant: "Mastery / Belonging",
+    quadrantTag: "mastery-belonging",
+    position: 8,
+    motto: "You only live once.",
+    desire: "To enjoy, to lighten the world",
+    fear: "Boredom",
     avatar: "/archetypes/archetype-jester.png",
   },
   {
@@ -89,6 +148,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Lover",
     nameZh: "情人",
     quadrant: "Mastery / Belonging",
+    quadrantTag: "mastery-belonging",
+    position: 9,
+    motto: "I only have eyes for you.",
+    desire: "Intimacy, sensual experience",
+    fear: "Being alone, unloved",
     avatar: "/archetypes/archetype-lover.png",
   },
   {
@@ -96,6 +160,11 @@ export const archetypes: Archetype[] = [
     nameEn: "Everyman",
     nameZh: "平凡人",
     quadrant: "Stability / Belonging",
+    quadrantTag: "stability-belonging",
+    position: 10,
+    motto: "All people are created equal.",
+    desire: "To belong, to connect",
+    fear: "Standing out, exclusion",
     avatar: "/archetypes/archetype-everyman.png",
   },
   {
@@ -103,9 +172,37 @@ export const archetypes: Archetype[] = [
     nameEn: "Caregiver",
     nameZh: "照顾者",
     quadrant: "Stability / Belonging",
+    quadrantTag: "stability-belonging",
+    position: 11,
+    motto: "Love your neighbor as yourself.",
+    desire: "To protect and care for others",
+    fear: "Ingratitude, selfishness",
     avatar: "/archetypes/archetype-caregiver.png",
   },
 ];
+
+export const archetypesById: Record<ArchetypeId, Archetype> = Object.fromEntries(
+  archetypes.map((a) => [a.id, a]),
+) as Record<ArchetypeId, Archetype>;
+
+/**
+ * Position on a circle, 0-indexed from 12 o'clock, clockwise.
+ * Returns SVG-space coordinates (y grows downward).
+ */
+export function archetypeNodePosition(
+  position: number,
+  radius: number,
+  cx = 0,
+  cy = 0,
+): { x: number; y: number } {
+  const angle = (position / 12) * 2 * Math.PI - Math.PI / 2;
+  return {
+    x: cx + radius * Math.cos(angle),
+    y: cy + radius * Math.sin(angle),
+  };
+}
+
+export type ArchetypeScores = Partial<Record<ArchetypeId, number>>;
 
 export const phases = [
   {
