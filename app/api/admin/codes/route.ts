@@ -15,10 +15,6 @@ export async function GET() {
 
 const createSchema = z.object({
   note: z.string().max(500).optional().nullable(),
-  recipientName: z.string().max(120).optional().nullable(),
-  recipientEmail: z.string().email().max(200).optional().nullable().or(z.literal("")),
-  expiresAt: z.string().datetime().optional().nullable().or(z.literal("")),
-  modelOverride: z.string().max(120).optional().nullable().or(z.literal("")),
 });
 
 export async function POST(req: Request) {
@@ -31,23 +27,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const { note, recipientName, recipientEmail, expiresAt, modelOverride } =
-    parsed.data;
+  const note = parsed.data.note?.trim() || null;
 
-  // Try up to 5 times to avoid collision (extremely unlikely with 12 chars from 31-letter alphabet)
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateAccessCode();
     try {
       const [row] = await db
         .insert(accessCodes)
-        .values({
-          code,
-          note: note || null,
-          recipientName: recipientName || null,
-          recipientEmail: recipientEmail || null,
-          expiresAt: expiresAt ? new Date(expiresAt) : null,
-          modelOverride: modelOverride || null,
-        })
+        .values({ code, note })
         .returning();
       return NextResponse.json({ code: row });
     } catch (err: unknown) {

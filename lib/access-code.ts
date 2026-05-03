@@ -1,29 +1,45 @@
-export const DEV_ACCESS_CODES = new Set([
-  "DEMO-2026-TEST",
-  "AL3X-PROC-STA1",
-  "OPEN-DOOR-FREE",
-]);
-
-export type AccessCodeError = "" | "length" | "unknown";
+export type AccessCodeError =
+  | ""
+  | "length"
+  | "unknown"
+  | "revoked"
+  | "completed"
+  | "network";
 
 export function formatAccessCode(value: string) {
   const raw = value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 12);
-
   return raw.match(/.{1,4}/g)?.join("-") ?? "";
 }
 
-export function validateAccessCode(value: string):
-  | { ok: true; code: string }
-  | { ok: false; error: Exclude<AccessCodeError, ""> } {
-  const formatted = formatAccessCode(value);
+export function isCompleteCode(formatted: string) {
+  return formatted.replace(/-/g, "").length === 12;
+}
 
-  if (formatted.replace(/-/g, "").length !== 12) {
+export async function verifyAccessCode(value: string): Promise<
+  | { ok: true; code: string }
+  | { ok: false; error: Exclude<AccessCodeError, ""> }
+> {
+  const formatted = formatAccessCode(value);
+  if (!isCompleteCode(formatted)) {
     return { ok: false, error: "length" };
   }
 
-  if (!DEV_ACCESS_CODES.has(formatted)) {
-    return { ok: false, error: "unknown" };
-  }
+  try {
+    const res = await fetch("/api/verify-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: formatted }),
+    });
 
-  return { ok: true, code: formatted };
+    const data = (await res.json().catch(() => null)) as
+      | { ok: true; code: string }
+      | { ok: false; error: Exclude<AccessCodeError, "" | "network"> }
+      | null;
+
+    if (!data) return { ok: false, error: "network" };
+    if (data.ok) return { ok: true, code: data.code };
+    return { ok: false, error: data.error };
+  } catch {
+    return { ok: false, error: "network" };
+  }
 }

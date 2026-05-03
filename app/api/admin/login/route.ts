@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { ADMIN_COOKIE_NAME, adminCookieOptions, signAdminSession } from "@/lib/auth/session";
+import {
+  ADMIN_COOKIE_NAME,
+  adminCookieOptions,
+  signAdminSession,
+} from "@/lib/auth/session";
 
 const bodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+
+const DUMMY_HASH = "$2a$12$" + "x".repeat(53);
 
 export async function POST(req: Request) {
   const json = await req.json().catch(() => null);
@@ -27,8 +33,7 @@ export async function POST(req: Request) {
   }
 
   if (email.toLowerCase() !== adminEmail.toLowerCase()) {
-    // Run a dummy compare to keep response time consistent
-    await bcrypt.compare(password, "$2a$12$" + "x".repeat(53));
+    await bcrypt.compare(password, DUMMY_HASH);
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 

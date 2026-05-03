@@ -7,20 +7,8 @@ import { accessCodes } from "@/db/schema";
 const codeFormat = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
 const patchSchema = z.object({
-  status: z
-    .enum(["issued", "active", "completed", "revoked"])
-    .optional(),
+  status: z.enum(["issued", "active", "completed", "revoked"]).optional(),
   note: z.string().max(500).optional().nullable(),
-  recipientName: z.string().max(120).optional().nullable(),
-  recipientEmail: z
-    .string()
-    .email()
-    .max(200)
-    .optional()
-    .nullable()
-    .or(z.literal("")),
-  expiresAt: z.string().datetime().optional().nullable().or(z.literal("")),
-  modelOverride: z.string().max(120).optional().nullable().or(z.literal("")),
 });
 
 interface Params {
@@ -45,15 +33,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const data = parsed.data;
   const update: Record<string, unknown> = {};
   if (data.status !== undefined) update.status = data.status;
-  if (data.note !== undefined) update.note = data.note || null;
-  if (data.recipientName !== undefined)
-    update.recipientName = data.recipientName || null;
-  if (data.recipientEmail !== undefined)
-    update.recipientEmail = data.recipientEmail || null;
-  if (data.expiresAt !== undefined)
-    update.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
-  if (data.modelOverride !== undefined)
-    update.modelOverride = data.modelOverride || null;
+  if (data.note !== undefined) update.note = data.note?.trim() || null;
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
@@ -68,7 +48,6 @@ export async function PATCH(req: Request, { params }: Params) {
   if (!row) {
     return NextResponse.json({ error: "Code not found" }, { status: 404 });
   }
-
   return NextResponse.json({ code: row });
 }
 

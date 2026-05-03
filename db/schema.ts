@@ -23,9 +23,6 @@ export const accessCodes = pgTable(
     status: accessCodeStatus("status").notNull().default("issued"),
     note: text("note"),
     recipientName: text("recipient_name"),
-    recipientEmail: text("recipient_email"),
-    expiresAt: timestamp("expires_at", { withTimezone: true }),
-    modelOverride: text("model_override"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

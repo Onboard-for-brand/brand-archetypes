@@ -10,7 +10,7 @@ import { I18nText } from "@/components/I18nText";
 import {
   type AccessCodeError,
   formatAccessCode,
-  validateAccessCode,
+  verifyAccessCode,
 } from "@/lib/access-code";
 import { archetypes } from "@/lib/archetypes";
 
@@ -30,6 +30,7 @@ export default function Home() {
   const [accessCode, setAccessCode] = useState("");
   const [accessError, setAccessError] = useState<AccessCodeError>("");
   const [verifiedCode, setVerifiedCode] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
   const [isEntryTransitioning, setIsEntryTransitioning] = useState(false);
   const [isPageLoaded, setIsPageLoaded] = useState(false);
 
@@ -582,10 +583,16 @@ export default function Home() {
     }
   }
 
-  function submitAccessCode(event: React.FormEvent<HTMLFormElement>) {
+  async function submitAccessCode(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isVerifying) return;
 
-    const result = validateAccessCode(accessCode);
+    setAccessError("");
+    setIsVerifying(true);
+
+    const result = await verifyAccessCode(accessCode);
+
+    setIsVerifying(false);
 
     if (!result.ok) {
       setAccessCode(formatAccessCode(accessCode));
@@ -594,7 +601,6 @@ export default function Home() {
     }
 
     setVerifiedCode(result.code);
-    setAccessError("");
     setTestEntryState("verified");
   }
 
@@ -972,22 +978,32 @@ export default function Home() {
                       maxLength={14}
                       autoCapitalize="characters"
                       spellCheck={false}
-                      disabled={!isTestEntryActive}
+                      disabled={!isTestEntryActive || isVerifying}
                     />
                   </label>
                   <div className="cta-form-row">
                     <div>
-                      <p className="cta-form-hint">
-                        DEV{" "}
-                        <span className="cta-form-hint__sep">{"///"}</span>{" "}
-                        <code>DEMO-2026-TEST</code>
-                      </p>
                       {accessError ? (
                         <p className="cta-form-error" role="alert">
                           {accessError === "length" ? (
                             <I18nText
                               zh="访问码为 12 位"
                               en="Access codes are 12 characters"
+                            />
+                          ) : accessError === "revoked" ? (
+                            <I18nText
+                              zh="此访问码已被撤销"
+                              en="This code has been revoked"
+                            />
+                          ) : accessError === "completed" ? (
+                            <I18nText
+                              zh="此访问码已使用完成"
+                              en="This code has already been completed"
+                            />
+                          ) : accessError === "network" ? (
+                            <I18nText
+                              zh="网络错误，请重试"
+                              en="Network error, try again"
                             />
                           ) : (
                             <I18nText
@@ -1001,10 +1017,19 @@ export default function Home() {
                     <button
                       className="cta-form-submit"
                       type="submit"
-                      disabled={!isTestEntryActive}
+                      disabled={!isTestEntryActive || isVerifying}
                     >
-                      VERIFY{" "}
-                      <span className="cta-form-submit__sep">/</span> 校验
+                      {isVerifying ? (
+                        <>
+                          VERIFYING{" "}
+                          <span className="cta-form-submit__sep">/</span> 校验中
+                        </>
+                      ) : (
+                        <>
+                          VERIFY{" "}
+                          <span className="cta-form-submit__sep">/</span> 校验
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>
