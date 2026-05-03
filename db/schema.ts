@@ -7,7 +7,14 @@ import {
   pgEnum,
   check,
   index,
+  uniqueIndex,
+  jsonb,
+  integer,
+  uuid,
 } from "drizzle-orm/pg-core";
+
+import type { RadarSnapshot } from "@/lib/radar-session";
+import type { TurnAnalysis } from "@/lib/ai/tool-schema";
 
 export const accessCodeStatus = pgEnum("access_code_status", [
   "issued",
@@ -51,3 +58,73 @@ export const appSettings = pgTable("app_settings", {
 });
 
 export type AppSetting = typeof appSettings.$inferSelect;
+
+/**
+ * Per-code interview state cache. One row = one in-flight or completed
+ * interview. The radar polygon, terminology registry, and progress pointer
+ * live here so a refresh / cross-device resume can replay where the user was.
+ */
+export const sessions = pgTable("sessions", {
+  code: varchar("code", { length: 14 })
+    .primaryKey()
+    .references(() => accessCodes.code, { onDelete: "cascade" }),
+  radarState: jsonb("radar_state").$type<RadarSnapshot>().notNull(),
+  terminology: jsonb("terminology")
+    .$type<Record<string, string>>()
+    .notNull()
+    .default({}),
+  /** 'A' | 'B' | 'C' or null until calibration set it. */
+  mode: varchar("mode", { length: 1 }),
+  /** "CQ1".."CQ5" | "Q1".."Q42" | "DONE". */
+  nextQuestionKey: varchar("next_question_key", { length: 8 })
+    .notNull()
+    .default("CQ1"),
+  /** Native language declared in CQ1. */
+  nativeLanguage: text("native_language"),
+  /** Monotonic sequence counter — every message reserves one before insert. */
+  lastSeq: integer("last_seq").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
+
+/**
+ * Append-only conversation log. (code, seq) is the canonical message
+ * identifier. `analysis` carries the AI's full structured tool output
+ * (bridge / question / reasoning / deltas) for assistant turns; null for
+ * user turns.
+ */
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: varchar("code", { length: 14 })
+      .notNull()
+      .references(() => accessCodes.code, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    /** 'user' | 'assistant'. (System messages are server-only, not persisted.) */
+    role: varchar("role", { length: 16 }).notNull(),
+    /** User input verbatim, or assistant text fallback. */
+    contentText: text("content_text"),
+    /** Full TurnAnalysis from the AI's tool call (assistant rows only). */
+    analysis: jsonb("analysis").$type<TurnAnalysis | null>(),
+    /** "CQ1".."Q42"|"AP1".."AP3" — which question this turn delivered (assistant only). */
+    questionKey: varchar("question_key", { length: 8 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    uniqueIndex("messages_code_seq_uniq").on(table.code, table.seq),
+    index("messages_code_created_idx").on(table.code, table.createdAt),
+  ],
+);
+
+export type Message = typeof messages.$inferSelect;
+export type NewMessage = typeof messages.$inferInsert;

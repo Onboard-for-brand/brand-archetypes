@@ -6,6 +6,7 @@ import {
   convertToModelMessages,
   type UIMessage,
   type ModelMessage,
+  type StreamTextOnFinishCallback,
 } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 
@@ -54,6 +55,8 @@ interface StreamTurnArgs {
   onAnalysis: (analysis: TurnAnalysis) => Promise<void> | void;
   /** Optional extra system-side nudge for kickoff turns / phase transitions. */
   systemNudge?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onFinish?: StreamTextOnFinishCallback<any>;
 }
 
 /**
@@ -120,6 +123,7 @@ export async function streamTurn(args: StreamTurnArgs) {
       }),
     },
     toolChoice: { type: "tool", toolName: "emitTurnAnalysis" },
+    onFinish: args.onFinish,
   });
 }
 

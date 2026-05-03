@@ -18,6 +18,60 @@ import {
   type RadarDeltas,
 } from "@/lib/radar-session";
 import { archetypes, type ArchetypeId } from "@/lib/archetypes";
+import type { TurnAnalysis } from "@/lib/ai/tool-schema";
+
+interface ResumeMessage {
+  id: string;
+  seq: number;
+  role: "user" | "assistant";
+  text: string;
+  analysis: TurnAnalysis | null;
+  createdAt: string;
+}
+
+interface ResumePayload {
+  code: string;
+  exists: boolean;
+  radarState: {
+    archetypeScores: Record<ArchetypeId, number>;
+    primaryId: ArchetypeId | null;
+    journeyPosition: number;
+    internalStructure: { why: number; how: number; want: number };
+  };
+  mode: string | null;
+  nextQuestionKey: string;
+  nativeLanguage: string | null;
+  messages: ResumeMessage[];
+}
+
+/**
+ * Reconstruct a UIMessage from a persisted DB row. Assistant rows that
+ * carry the structured `analysis` get a `tool-emitTurnAnalysis` part so
+ * `MessageBlock` finds the same `bridge` / `question` it would on a fresh
+ * stream. User rows just get a text part.
+ */
+function resumeMessageToUI(m: ResumeMessage): UIMessage {
+  if (m.role === "assistant" && m.analysis) {
+    return {
+      id: m.id,
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-emitTurnAnalysis",
+          toolCallId: m.id,
+          state: "output-available",
+          input: m.analysis,
+          output: { ok: true },
+        },
+      ],
+    } as UIMessage;
+  }
+  return {
+    id: m.id,
+    role: m.role,
+    parts: [{ type: "text", text: m.text }],
+  } as UIMessage;
+}
 
 /** Flip to `true` to expose the radar score-override panel in the top-right. */
 const DEBUG_RADAR_ENABLED = false;
@@ -37,6 +91,9 @@ export function InterviewOverlay({ code }: Props) {
   sessionRef.current = session;
 
   const [input, setInput] = useState("");
+
+  // Resume hydration state — flips to `true` once the resume fetch resolves.
+  const [resumed, setResumed] = useState(false);
 
   // Debug — top-right panel for overriding individual archetype scores live.
   const [debugOpen, setDebugOpen] = useState(false);
@@ -104,16 +161,56 @@ export function InterviewOverlay({ code }: Props) {
     if (marker) marker.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [lastAssistantId]);
 
-  // AI speaks first: when overlay mounts on a fresh session, fire an empty
-  // kickoff turn so the AI delivers the bilingual welcome + CQ1 unprompted.
+  // Resume on mount: pull the persisted session + message log, hydrate the
+  // radar polygon, and reconstruct UIMessages from the DB rows so they show
+  // up identically to freshly-streamed turns.
+  const setMessages = chat.setMessages;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/interview/session?code=${encodeURIComponent(code)}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) throw new Error(`session fetch ${res.status}`);
+        const data = (await res.json()) as ResumePayload;
+        if (cancelled) return;
+
+        if (data.exists) {
+          sessionRef.current.hydrate({
+            archetypeScores: data.radarState.archetypeScores,
+            primaryId: data.radarState.primaryId,
+            journeyPosition: data.radarState.journeyPosition,
+            internalStructure: data.radarState.internalStructure,
+          });
+
+          if (data.messages.length > 0) {
+            setMessages(data.messages.map(resumeMessageToUI));
+          }
+        }
+      } catch (err) {
+        console.warn("[overlay] resume failed", err);
+      } finally {
+        if (!cancelled) setResumed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [code, setMessages]);
+
+  // AI speaks first: only fire after resume is settled and there are no
+  // existing messages.
   const kickedOffRef = useRef(false);
   useEffect(() => {
+    if (!resumed) return;
     if (kickedOffRef.current) return;
     if (chat.messages.length > 0) return;
     if (chat.status !== "ready") return;
     kickedOffRef.current = true;
     chat.sendMessage();
-  }, [chat]);
+  }, [chat, resumed]);
 
   // Entry slide-in animation.
   useIsoLayoutEffect(() => {
@@ -228,7 +325,7 @@ export function InterviewOverlay({ code }: Props) {
               gap: 20,
             }}
           >
-            {chat.messages.length === 0 && isStreaming ? (
+            {chat.messages.length === 0 && (!resumed || isStreaming) ? (
               <p
                 style={{
                   margin: 0,
@@ -238,7 +335,7 @@ export function InterviewOverlay({ code }: Props) {
                   color: "var(--brand-archetypes-gray-500)",
                 }}
               >
-                CONNECTING…
+                {!resumed ? "LOADING SESSION…" : "CONNECTING…"}
               </p>
             ) : (
               chat.messages.map((m) => <MessageBlock key={m.id} message={m} />)
@@ -523,7 +620,10 @@ function MessageBlock({ message }: { message: UIMessage }) {
   if (!isUser && !bridge && !question) return null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div
+      data-msg-block={message.id}
+      style={{ display: "flex", flexDirection: "column", gap: 10 }}
+    >
       <div
         data-msg-marker={message.id}
         style={{

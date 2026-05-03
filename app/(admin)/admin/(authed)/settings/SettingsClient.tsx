@@ -50,7 +50,7 @@ export function SettingsClient({
         </p>
         <h1 className="mt-1 text-xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          Choose the Anthropic model that powers user-facing interviews.
+          Choose the Claude model that powers user-facing interviews.
           Changes apply to new conversations.
         </p>
       </header>
