@@ -145,21 +145,96 @@ export function InterviewOverlay({ code }: Props) {
 
   const isStreaming = chat.status === "streaming" || chat.status === "submitted";
 
-  // Auto-scroll only on AI replies. When a new assistant message arrives,
-  // align its role marker (the "AI" label) to the top of the chat viewport,
-  // leaving a 4px breathing space. User messages don't trigger scroll.
+  // Auto-scroll on AI replies — anchor the previous USER message's "YOU"
+  // marker to the top of the chat viewport (with the 4px scroll-margin).
+  // Effect: YOU + user content + AI marker + AI content all visible below.
+  // On kickoff (no prior user message) fall back to the AI marker.
   const lastMessage = chat.messages[chat.messages.length - 1];
   const lastAssistantId =
     lastMessage && lastMessage.role === "assistant" ? lastMessage.id : null;
+  let prevUserIdScan: string | null = null;
+  for (let i = chat.messages.length - 2; i >= 0; i--) {
+    if (chat.messages[i].role === "user") {
+      prevUserIdScan = chat.messages[i].id;
+      break;
+    }
+  }
+  const prevUserId = lastAssistantId ? prevUserIdScan : null;
+
   useEffect(() => {
     if (!lastAssistantId) return;
     const container = chatScrollRef.current;
     if (!container) return;
+    const targetId = prevUserId ?? lastAssistantId;
     const marker = container.querySelector<HTMLElement>(
-      `[data-msg-marker="${lastAssistantId}"]`,
+      `[data-msg-marker="${targetId}"]`,
     );
     if (marker) marker.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [lastAssistantId]);
+  }, [lastAssistantId, prevUserId]);
+
+  // Dynamic bottom padding so the scroll floor is exactly "last YOU at top":
+  // padding = clientHeight - (lastUserHeight + gap + lastAIHeight). If that's
+  // negative (content already exceeds viewport) padding goes to 0 and the
+  // user can scroll freely past YOU to read everything.
+  useEffect(() => {
+    const container = chatScrollRef.current;
+    if (!container) return;
+
+    // Find the most recent user message id (irrespective of trailing role).
+    let lastUserId: string | null = null;
+    for (let i = chat.messages.length - 1; i >= 0; i--) {
+      if (chat.messages[i].role === "user") {
+        lastUserId = chat.messages[i].id;
+        break;
+      }
+    }
+    const tailId = chat.messages[chat.messages.length - 1]?.id ?? null;
+
+    function recompute() {
+      if (!container) return;
+      if (!lastUserId) {
+        container.style.paddingBottom = "0px";
+        return;
+      }
+      const gap = 20;
+      const userBlock = container.querySelector<HTMLElement>(
+        `[data-msg-block="${lastUserId}"]`,
+      );
+      const tailBlock =
+        tailId && tailId !== lastUserId
+          ? container.querySelector<HTMLElement>(
+              `[data-msg-block="${tailId}"]`,
+            )
+          : null;
+      if (!userBlock) {
+        container.style.paddingBottom = "0px";
+        return;
+      }
+      const userHeight = userBlock.offsetHeight;
+      const tailHeight = tailBlock ? tailBlock.offsetHeight + gap : 0;
+      const padding =
+        container.clientHeight - userHeight - gap - tailHeight;
+      container.style.paddingBottom = `${Math.max(0, padding)}px`;
+    }
+
+    recompute();
+
+    const observer = new ResizeObserver(() => recompute());
+    observer.observe(container);
+    if (lastUserId) {
+      const u = container.querySelector<HTMLElement>(
+        `[data-msg-block="${lastUserId}"]`,
+      );
+      if (u) observer.observe(u);
+    }
+    if (tailId && tailId !== lastUserId) {
+      const t = container.querySelector<HTMLElement>(
+        `[data-msg-block="${tailId}"]`,
+      );
+      if (t) observer.observe(t);
+    }
+    return () => observer.disconnect();
+  }, [chat.messages.length, lastAssistantId]);
 
   // Resume on mount: pull the persisted session + message log, hydrate the
   // radar polygon, and reconstruct UIMessages from the DB rows so they show
@@ -319,7 +394,7 @@ export function InterviewOverlay({ code }: Props) {
             style={{
               overflow: "auto",
               minHeight: 0,
-              padding: "20px 32px 80vh",
+              padding: "20px 32px 0",
               display: "flex",
               flexDirection: "column",
               gap: 20,
