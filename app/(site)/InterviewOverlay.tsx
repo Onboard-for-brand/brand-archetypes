@@ -13,10 +13,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { RadarChart } from "@/components/RadarChart";
 import { useRadarSession } from "@/hooks/useRadarSession";
-import {
-  RadarDeltasSchema,
-  type RadarDeltas,
-} from "@/lib/radar-session";
+import { RadarDeltasSchema, type RadarDeltas } from "@/lib/radar-session";
 import { archetypes, type ArchetypeId } from "@/lib/archetypes";
 import type { TurnAnalysis } from "@/lib/ai/tool-schema";
 
@@ -143,7 +140,8 @@ export function InterviewOverlay({ code }: Props) {
     },
   });
 
-  const isStreaming = chat.status === "streaming" || chat.status === "submitted";
+  const isStreaming =
+    chat.status === "streaming" || chat.status === "submitted";
 
   // Auto-scroll on AI replies — anchor the previous USER message's "YOU"
   // marker to the top of the chat viewport (with the 4px scroll-margin).
@@ -202,9 +200,7 @@ export function InterviewOverlay({ code }: Props) {
       );
       const tailBlock =
         tailId && tailId !== lastUserId
-          ? container.querySelector<HTMLElement>(
-              `[data-msg-block="${tailId}"]`,
-            )
+          ? container.querySelector<HTMLElement>(`[data-msg-block="${tailId}"]`)
           : null;
       if (!userBlock) {
         container.style.paddingBottom = "0px";
@@ -212,8 +208,7 @@ export function InterviewOverlay({ code }: Props) {
       }
       const userHeight = userBlock.offsetHeight;
       const tailHeight = tailBlock ? tailBlock.offsetHeight + gap : 0;
-      const padding =
-        container.clientHeight - userHeight - gap - tailHeight;
+      const padding = container.clientHeight - userHeight - gap - tailHeight;
       container.style.paddingBottom = `${Math.max(0, padding)}px`;
     }
 
@@ -331,7 +326,7 @@ export function InterviewOverlay({ code }: Props) {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submit();
     }
