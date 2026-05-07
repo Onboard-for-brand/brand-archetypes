@@ -3,9 +3,10 @@ import type { UIMessage } from "ai";
 import { streamTurn } from "@/lib/ai/client";
 import {
   ensureSession,
+  loadCodeStatus,
   reserveSeqs,
-  writeUserTurn,
   writeAssistantTurn,
+  writeUserTurn,
 } from "@/lib/ai/persistence";
 import { RadarStateSchema } from "@/lib/radar-session";
 import type { TurnAnalysis } from "@/lib/ai/tool-schema";
@@ -39,6 +40,27 @@ export async function POST(req: Request) {
 
   const { code, messages, radarSnapshot, kickoff } = parsed.data;
   const isKickoff = kickoff === true && messages.length === 0;
+
+  // Reject turns against codes that no longer accept conversation. Completed
+  // codes have already produced the report-offer card — the client locks the
+  // input box at that point, but this guard catches stale tabs / direct API
+  // calls. `null` = unknown code; bouncing here saves a session-row insert.
+  const codeStatus = await loadCodeStatus(code);
+  if (codeStatus === null) {
+    return new Response(JSON.stringify({ error: "code_not_found" }), {
+      status: 404,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  if (codeStatus === "completed" || codeStatus === "revoked") {
+    return new Response(
+      JSON.stringify({ error: "code_not_active", status: codeStatus }),
+      {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      },
+    );
+  }
 
   // Ensure a session row exists, then reserve seqs up front. Kickoff turns
   // skip the user write (no actual user input).

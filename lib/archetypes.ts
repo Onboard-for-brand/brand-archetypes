@@ -31,6 +31,9 @@ export interface Archetype {
   motto: string;
   desire: string;
   fear: string;
+  /** What this archetype does for the people who follow it — bilingual. */
+  serviceEn: string;
+  serviceZh: string;
   avatar: string;
 }
 
@@ -45,6 +48,8 @@ export const archetypes: Archetype[] = [
     motto: "Power isn't everything. It's the only thing.",
     desire: "Stability and control",
     fear: "Chaos, being overthrown",
+    serviceEn: "Build the new order people need.",
+    serviceZh: "帮人建立他们需要的新秩序",
     avatar: "/archetypes/archetype-ruler.png",
   },
   {
@@ -57,6 +62,8 @@ export const archetypes: Archetype[] = [
     motto: "If it can be imagined, it can be created.",
     desire: "To create things of enduring value",
     fear: "Mediocrity, lack of vision",
+    serviceEn: "Make the new things people need.",
+    serviceZh: "帮人创造他们需要的新事物",
     avatar: "/archetypes/archetype-creator.png",
   },
   {
@@ -69,6 +76,8 @@ export const archetypes: Archetype[] = [
     motto: "Free to be you and me.",
     desire: "Paradise, simple goodness",
     fear: "Punishment for doing wrong",
+    serviceEn: "Help people keep or rebuild faith.",
+    serviceZh: "帮人维持或重塑信仰",
     avatar: "/archetypes/archetype-innocent.png",
   },
   {
@@ -81,6 +90,8 @@ export const archetypes: Archetype[] = [
     motto: "The truth will set you free.",
     desire: "To find truth",
     fear: "Being deceived, ignorance",
+    serviceEn: "Help people understand the world around them.",
+    serviceZh: "帮人了解周遭的世界",
     avatar: "/archetypes/archetype-sage.png",
   },
   {
@@ -93,6 +104,8 @@ export const archetypes: Archetype[] = [
     motto: "Don't fence me in.",
     desire: "Freedom, authentic experience",
     fear: "Being trapped, conformity",
+    serviceEn: "Keep people independent through outward exploration.",
+    serviceZh: "通过探索外部世界帮人保持独立",
     avatar: "/archetypes/archetype-explorer.png",
   },
   {
@@ -105,6 +118,8 @@ export const archetypes: Archetype[] = [
     motto: "It can happen.",
     desire: "To understand the laws of the universe",
     fear: "Unintended consequences",
+    serviceEn: "Offer people methods of transformation.",
+    serviceZh: "为人提供蜕变的方法",
     avatar: "/archetypes/archetype-magician.png",
   },
   {
@@ -117,6 +132,8 @@ export const archetypes: Archetype[] = [
     motto: "Rules are meant to be broken.",
     desire: "Liberation, revolution",
     fear: "Powerlessness, irrelevance",
+    serviceEn: "Help people break the rules.",
+    serviceZh: "帮人打破规则",
     avatar: "/archetypes/archetype-rebel.png",
   },
   {
@@ -129,6 +146,8 @@ export const archetypes: Archetype[] = [
     motto: "Where there's a will, there's a way.",
     desire: "To prove worth through courageous action",
     fear: "Cowardice, weakness",
+    serviceEn: "Help people act courageously.",
+    serviceZh: "帮人做出勇敢行为",
     avatar: "/archetypes/archetype-hero.png",
   },
   {
@@ -141,6 +160,8 @@ export const archetypes: Archetype[] = [
     motto: "You only live once.",
     desire: "To enjoy, to lighten the world",
     fear: "Boredom",
+    serviceEn: "Help people lighten up.",
+    serviceZh: "帮人快乐一下",
     avatar: "/archetypes/archetype-jester.png",
   },
   {
@@ -153,6 +174,8 @@ export const archetypes: Archetype[] = [
     motto: "I only have eyes for you.",
     desire: "Intimacy, sensual experience",
     fear: "Being alone, unloved",
+    serviceEn: "Help people find love and love each other.",
+    serviceZh: "帮人寻找爱并爱人",
     avatar: "/archetypes/archetype-lover.png",
   },
   {
@@ -165,6 +188,8 @@ export const archetypes: Archetype[] = [
     motto: "All people are created equal.",
     desire: "To belong, to connect",
     fear: "Standing out, exclusion",
+    serviceEn: "Help people build connection.",
+    serviceZh: "帮人建立联系",
     avatar: "/archetypes/archetype-everyman.png",
   },
   {
@@ -177,6 +202,8 @@ export const archetypes: Archetype[] = [
     motto: "Love your neighbor as yourself.",
     desire: "To protect and care for others",
     fear: "Ingratitude, selfishness",
+    serviceEn: "Use knowledge and skill to solve specific problems.",
+    serviceZh: "用知识、技能与专业服务，解决特定问题",
     avatar: "/archetypes/archetype-caregiver.png",
   },
 ];

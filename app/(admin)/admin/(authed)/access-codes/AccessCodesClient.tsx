@@ -57,7 +57,7 @@ const STATUS_STYLE: Record<
     dotClass: "bg-[oklch(0.55_0.18_245)]",
   },
   completed: {
-    label: "已使用",
+    label: "已完成",
     className:
       "bg-[oklch(0.96_0.04_150)] text-[oklch(0.42_0.14_150)] border-[oklch(0.88_0.05_150)]",
     dotClass: "bg-[oklch(0.55_0.16_150)]",
@@ -245,7 +245,7 @@ function StatsRow({
       accent: "text-[oklch(0.42_0.16_245)]",
     },
     {
-      label: "已使用",
+      label: "已完成",
       value: counts.completed,
       dot: "bg-[oklch(0.55_0.16_150)]",
       accent: "text-[oklch(0.42_0.14_150)]",
@@ -418,11 +418,9 @@ function StatusSelect({
             "hover:brightness-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--color-fg)]/15 data-[state=open]:brightness-[0.95]",
           ].join(" ")}
         >
-          <motion.span
-            layoutId={`status-dot-${status.label}`}
+          <span
             aria-hidden="true"
             className={["size-1.5 rounded-full", status.dotClass].join(" ")}
-            transition={popSpring}
           />
           <span>{status.label}</span>
           <ChevronIcon aria-hidden="true" className="size-3 opacity-60" />

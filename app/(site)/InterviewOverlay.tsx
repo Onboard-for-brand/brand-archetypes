@@ -12,6 +12,7 @@ import gsap from "gsap";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { RadarChart } from "@/components/RadarChart";
+import { ReportOfferCard } from "@/components/ReportOfferCard";
 import { useRadarSession } from "@/hooks/useRadarSession";
 import { RadarDeltasSchema, type RadarDeltas } from "@/lib/radar-session";
 import { archetypes, type ArchetypeId } from "@/lib/archetypes";
@@ -142,6 +143,21 @@ export function InterviewOverlay({ code }: Props) {
 
   const isStreaming =
     chat.status === "streaming" || chat.status === "submitted";
+
+  // Q42 has been answered once any assistant turn carries a report-offer cta.
+  // From that point: input is locked, the only path forward is the card.
+  const interviewClosed = chat.messages.some((m) => {
+    if (m.role !== "assistant") return false;
+    for (const part of m.parts) {
+      if (part.type !== "tool-emitTurnAnalysis") continue;
+      const p = part as { type: string; input?: unknown };
+      if (p.input && typeof p.input === "object") {
+        const a = p.input as { cta?: { kind?: string } };
+        if (a.cta?.kind === "report-offer") return true;
+      }
+    }
+    return false;
+  });
 
   // Auto-scroll on AI replies — anchor the previous USER message's "YOU"
   // marker to the top of the chat viewport (with the 4px scroll-margin).
@@ -320,7 +336,7 @@ export function InterviewOverlay({ code }: Props) {
 
   function submit() {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text || isStreaming || interviewClosed) return;
     setInput("");
     chat.sendMessage({ text });
   }
@@ -408,7 +424,9 @@ export function InterviewOverlay({ code }: Props) {
                 {!resumed ? "LOADING SESSION…" : "CONNECTING…"}
               </p>
             ) : (
-              chat.messages.map((m) => <MessageBlock key={m.id} message={m} />)
+              chat.messages.map((m) => (
+                <MessageBlock key={m.id} message={m} code={code} />
+              ))
             )}
             {chat.error ? (
               <p
@@ -445,12 +463,18 @@ export function InterviewOverlay({ code }: Props) {
               color: "var(--brand-archetypes-gray-500)",
             }}
           >
-            YOUR RESPONSE
+            {interviewClosed ? "INTERVIEW COMPLETE" : "YOUR RESPONSE"}
           </div>
           <textarea
             name="interview-response"
-            placeholder="Type here…"
-            value={input}
+            placeholder={
+              interviewClosed
+                ? "访谈结束 · Interview complete"
+                : "Type here…"
+            }
+            value={interviewClosed ? "" : input}
+            readOnly={interviewClosed}
+            disabled={interviewClosed}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             autoComplete="off"
@@ -471,6 +495,8 @@ export function InterviewOverlay({ code }: Props) {
               minHeight: 110,
               background: "transparent",
               color: "var(--brand-archetypes-black)",
+              opacity: interviewClosed ? 0.5 : 1,
+              cursor: interviewClosed ? "not-allowed" : "text",
             }}
           />
           <div
@@ -484,8 +510,14 @@ export function InterviewOverlay({ code }: Props) {
               color: "var(--brand-archetypes-gray-500)",
             }}
           >
-            <span>{isStreaming ? "STREAMING…" : `${input.length} CHARS`}</span>
-            <span>⌘ ENTER · SUBMIT</span>
+            <span>
+              {interviewClosed
+                ? "—"
+                : isStreaming
+                  ? "STREAMING…"
+                  : `${input.length} CHARS`}
+            </span>
+            <span>{interviewClosed ? "OPEN REPORT ↑" : "⌘ ENTER · SUBMIT"}</span>
           </div>
         </section>
       </div>
@@ -658,9 +690,15 @@ function RadarDebugPanel({
 interface AnalysisPayload {
   bridge?: string;
   question?: string;
+  cta?: { kind?: string };
 }
 
-function MessageBlock({ message }: { message: UIMessage }) {
+interface MessageBlockProps {
+  message: UIMessage;
+  code: string;
+}
+
+function MessageBlock({ message, code }: MessageBlockProps) {
   const isUser = message.role === "user";
 
   const text = message.parts
@@ -673,6 +711,7 @@ function MessageBlock({ message }: { message: UIMessage }) {
   // (the question itself). `reasoning` is intentionally ignored — internal.
   let bridge = "";
   let question = "";
+  let cta: { kind: "report-offer" } | null = null;
   if (!isUser) {
     for (const part of message.parts) {
       if (part.type === "tool-emitTurnAnalysis") {
@@ -681,13 +720,14 @@ function MessageBlock({ message }: { message: UIMessage }) {
           const a = p.input as AnalysisPayload;
           if (typeof a.bridge === "string") bridge = a.bridge;
           if (typeof a.question === "string") question = a.question;
+          if (a.cta?.kind === "report-offer") cta = { kind: "report-offer" };
         }
       }
     }
   }
 
   if (isUser && !text) return null;
-  if (!isUser && !bridge && !question) return null;
+  if (!isUser && !bridge && !question && !cta) return null;
 
   return (
     <div
@@ -750,6 +790,7 @@ function MessageBlock({ message }: { message: UIMessage }) {
               {question}
             </div>
           ) : null}
+          {cta ? <ReportOfferCard code={code} /> : null}
         </>
       )}
     </div>

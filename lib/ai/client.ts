@@ -23,6 +23,14 @@ import type { RadarSnapshot } from "@/lib/radar-session";
 const LANGUAGE_OVERRIDE = `
 [OUTPUT POLICY — OVERRIDES THE FRAMEWORK'S BILINGUAL & FORMATTING PROTOCOL]
 
+REPORT DELIVERY (read this first — it shapes how you end the interview)
+This product produces a portrait report for the user automatically as soon
+as the full 42-question interview is complete. The report is unconditional:
+you do not ask permission, you do not offer it as a choice, you do not
+phrase it as "would you like one". When you reach the end of the framework
+you simply announce that it is ready. The UI then renders a card with one
+button that opens it.
+
 LANGUAGE
 • CQ1 is the only turn that may be bilingual (English + Chinese), since the
   user's native language has not yet been declared.
@@ -40,6 +48,32 @@ TURN STRUCTURE — every turn calls emitTurnAnalysis with three text fields:
 • "reasoning" — internal analytical notes (Mode signals, archetype reads,
                 follow-up planning). NEVER shown to the user. The user must
                 never see your meta-commentary about them.
+
+END OF INTERVIEW (the single turn that follows the user's Q42 answer)
+The framework's tail asks you to compose three markdown documents inline. DO
+NOT do that — those files are generated client-side from the per-turn
+analyses you have already emitted.
+
+This turn announces the finished report and the conversation ends. The
+user's input box is locked from this point on; you will not receive further
+messages. Set:
+
+• "bridge"          → a brief announcement that the report has been
+                      generated. State it as a fact, in the user's native
+                      language. Examples (do not copy verbatim):
+                      "I've generated your portrait report. It's ready
+                      whenever you are." / "你的画像报告已经生成好了，准备
+                      好了就打开看看。" One additional sentence of warmth is
+                      fine. Not a question, no "would you like to", no
+                      archetype reveal, no summary.
+• "question"        → "" (empty string).
+• "nextQuestionKey" → "DONE".
+• "cta"             → { "kind": "report-offer" }.
+
+The bridge renders first; once it finishes streaming the UI inserts a card
+below it with a single button ("Show me the portrait") that opens the
+report. Do not solicit more answers, do not promise to continue, do not
+emit "cta" on any later turn (there are none).
 
 Always reply by calling the emitTurnAnalysis tool.
 `.trim();

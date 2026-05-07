@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { accessCodes } from "@/db/schema";
+import { markCodeCompleted } from "@/lib/ai/persistence";
 
 const codeFormat = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
@@ -39,6 +40,19 @@ export async function PATCH(req: Request, { params }: Params) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
+  // Detect transition into "completed" — only fire the brand-summary AI
+  // call when the status actually crosses into completed (not on every
+  // idempotent update).
+  const [previous] = await db
+    .select({ status: accessCodes.status })
+    .from(accessCodes)
+    .where(eq(accessCodes.code, code));
+  if (!previous) {
+    return NextResponse.json({ error: "Code not found" }, { status: 404 });
+  }
+  const transitioningToCompleted =
+    data.status === "completed" && previous.status !== "completed";
+
   const [row] = await db
     .update(accessCodes)
     .set(update)
@@ -48,6 +62,14 @@ export async function PATCH(req: Request, { params }: Params) {
   if (!row) {
     return NextResponse.json({ error: "Code not found" }, { status: 404 });
   }
+
+  if (transitioningToCompleted) {
+    // Runs the brand-summary generation if it isn't already populated.
+    // This adds ~1–3s of latency to the PATCH but keeps the admin path
+    // and the AI cta path in sync on the same trigger.
+    await markCodeCompleted(code);
+  }
+
   return NextResponse.json({ code: row });
 }
 

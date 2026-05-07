@@ -2,7 +2,13 @@ import "server-only";
 
 import { eq, sql, asc } from "drizzle-orm";
 import { db } from "@/db/client";
-import { messages, sessions, type Message } from "@/db/schema";
+import {
+  accessCodes,
+  messages,
+  sessions,
+  type AccessCode,
+  type Message,
+} from "@/db/schema";
 import {
   applyRadarDeltas,
   emptyRadarState,
@@ -10,6 +16,62 @@ import {
   type RadarSnapshot,
 } from "@/lib/radar-session";
 import type { TurnAnalysis } from "./tool-schema";
+
+export type AccessCodeStatus = AccessCode["status"];
+
+/**
+ * Quick read-only lookup of an access code's status. Returns null if the
+ * code does not exist. Used by the turn route to short-circuit requests
+ * against revoked or already-completed codes.
+ */
+export async function loadCodeStatus(
+  code: string,
+): Promise<AccessCodeStatus | null> {
+  const [row] = await db
+    .select({ status: accessCodes.status })
+    .from(accessCodes)
+    .where(eq(accessCodes.code, code));
+  return row?.status ?? null;
+}
+
+/**
+ * Mark the code as completed AND ensure a brand-summary exists for it.
+ *
+ * Idempotent — re-running on an already-completed code refreshes the
+ * timestamp and skips the summary call if `sessions.brand_summary` is
+ * already populated. Called from:
+ *   • `writeAssistantTurn` when the AI emits `cta: report-offer` (natural
+ *     end-of-interview path)
+ *   • the admin PATCH route when an operator flips status to `completed`
+ *
+ * The brand-summary AI call runs synchronously here. In the natural path
+ * this happens inside `streamText`'s `onFinish` callback so the user-facing
+ * stream is not delayed; in the admin path it adds ~1–3s to the PATCH.
+ */
+export async function markCodeCompleted(code: string): Promise<void> {
+  await db
+    .update(accessCodes)
+    .set({ status: "completed", completedAt: sql`now()` })
+    .where(eq(accessCodes.code, code));
+
+  const [row] = await db
+    .select({ brandSummary: sessions.brandSummary })
+    .from(sessions)
+    .where(eq(sessions.code, code));
+  if (!row || row.brandSummary) return;
+
+  // Lazy import to avoid pulling the AI SDK into request paths that don't
+  // need it. The cyclic-looking dependency is fine — summarize.ts only
+  // reads, never writes back through persistence.
+  const { generateBrandSummary } = await import("./summarize");
+  const summary = await generateBrandSummary(code);
+  if (!summary) return;
+
+  await db
+    .update(sessions)
+    .set({ brandSummary: summary, updatedAt: sql`now()` })
+    .where(eq(sessions.code, code));
+}
 
 /**
  * Ensure a session row exists for `code`. Idempotent — safe to call on every
@@ -115,6 +177,13 @@ export async function writeAssistantTurn(input: {
       updatedAt: sql`now()`,
     })
     .where(eq(sessions.code, code));
+
+  // Q42 ended: AI emitted the report-offer card. The interview is closed —
+  // any further turn requests against this code will be rejected by the
+  // turn route's status guard.
+  if (analysis.cta?.kind === "report-offer") {
+    await markCodeCompleted(code);
+  }
 }
 
 export async function loadSessionState(code: string) {

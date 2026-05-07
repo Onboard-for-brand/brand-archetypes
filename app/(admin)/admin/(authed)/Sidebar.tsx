@@ -14,7 +14,6 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: "/admin/access-codes", label: "Access Code", icon: KeyIcon },
-  { href: "/admin/chat", label: "Chat", icon: ChatIcon },
   { href: "/admin/settings", label: "Settings", icon: GearIcon },
 ];
 
@@ -112,22 +111,6 @@ function KeyIcon(props: SVGProps<SVGSVGElement>) {
       <path d="M10.7 12.3 21 2" />
       <path d="m17 6 3 3" />
       <path d="m14 9 3 3" />
-    </svg>
-  );
-}
-
-function ChatIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M21 12a8 8 0 0 1-11.5 7.2L3 21l1.8-6.5A8 8 0 1 1 21 12Z" />
     </svg>
   );
 }
