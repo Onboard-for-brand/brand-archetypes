@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { loadMessages, loadSessionState } from "@/lib/ai/persistence";
+import {
+  loadCodeStatus,
+  loadMessages,
+  loadSessionState,
+  type AccessCodeStatus,
+} from "@/lib/ai/persistence";
 import { emptyRadarState, type RadarSnapshot } from "@/lib/radar-session";
 import type { TurnAnalysis } from "@/lib/ai/tool-schema";
 
@@ -21,10 +26,15 @@ const querySchema = z.object({
 export interface SessionResume {
   code: string;
   exists: boolean;
+  /** Access-code status — null if the code itself doesn't exist. */
+  status: AccessCodeStatus | null;
   radarState: RadarSnapshot;
   mode: string | null;
   nextQuestionKey: string;
   nativeLanguage: string | null;
+  brandSummary: string | null;
+  reportMd: string | null;
+  contextMd: string | null;
   messages: ResumeMessage[];
 }
 
@@ -48,19 +58,24 @@ export async function GET(req: Request) {
   }
   const { code } = parsed.data;
 
-  const [session, msgs] = await Promise.all([
+  const [session, msgs, status] = await Promise.all([
     loadSessionState(code),
     loadMessages(code),
+    loadCodeStatus(code),
   ]);
 
   const payload: SessionResume = session
     ? {
         code,
         exists: true,
+        status,
         radarState: session.radarState,
         mode: session.mode,
         nextQuestionKey: session.nextQuestionKey,
         nativeLanguage: session.nativeLanguage,
+        brandSummary: session.brandSummary,
+        reportMd: session.reportMd,
+        contextMd: session.contextMd,
         messages: msgs.map((m) => ({
           id: m.id,
           seq: m.seq,
@@ -73,10 +88,14 @@ export async function GET(req: Request) {
     : {
         code,
         exists: false,
+        status,
         radarState: emptyRadarState(),
         mode: null,
         nextQuestionKey: "CQ1",
         nativeLanguage: null,
+        brandSummary: null,
+        reportMd: null,
+        contextMd: null,
         messages: [],
       };
 

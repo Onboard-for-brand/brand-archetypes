@@ -164,26 +164,6 @@ export function RadarChart({
           })}
         </g>
 
-        {/* main crosshair — terminates at the outer ring */}
-        <g className="radar__crosshair">
-          <line
-            x1={r(cx)}
-            y1={r(cy - maxR)}
-            x2={r(cx)}
-            y2={r(cy + maxR)}
-            stroke="var(--brand-archetypes-gray-300)"
-            strokeWidth="0.5"
-          />
-          <line
-            x1={r(cx - maxR)}
-            y1={r(cy)}
-            x2={r(cx + maxR)}
-            y2={r(cy)}
-            stroke="var(--brand-archetypes-gray-300)"
-            strokeWidth="0.5"
-          />
-        </g>
-
         {/* tick numbers along the upper vertical axis */}
         <g className="radar__ticks">
           {RING_FRACTIONS.map((f) => (
@@ -205,9 +185,10 @@ export function RadarChart({
         <g
           className="radar__quad-labels"
           fontFamily="var(--font-framework)"
-          fontSize="10"
+          fontSize="12"
+          fontWeight="500"
           letterSpacing="2"
-          fill="var(--brand-archetypes-gray-500)"
+          fill="#000"
         >
           <text
             x={r(cx)}
@@ -215,7 +196,17 @@ export function RadarChart({
             textAnchor="middle"
             dominantBaseline="middle"
           >
-            STABILITY · 稳
+            <tspan x={r(cx)} dy="-0.6em">
+              STABILITY
+            </tspan>
+            <tspan
+              x={r(cx)}
+              dy="1.4em"
+              fontFamily="var(--font-body-zh)"
+              letterSpacing="1"
+            >
+              规避风险/稳/农耕文明
+            </tspan>
           </text>
           <text
             x={r(cx)}
@@ -223,7 +214,17 @@ export function RadarChart({
             textAnchor="middle"
             dominantBaseline="middle"
           >
-            MASTERY · 掌控
+            <tspan x={r(cx)} dy="-0.6em">
+              MASTERY
+            </tspan>
+            <tspan
+              x={r(cx)}
+              dy="1.4em"
+              fontFamily="var(--font-body-zh)"
+              letterSpacing="1"
+            >
+              掌控风险/浪/海洋文明
+            </tspan>
           </text>
           <text
             x={r(cx - quadR)}
@@ -231,7 +232,17 @@ export function RadarChart({
             textAnchor="end"
             dominantBaseline="middle"
           >
-            BELONGING · 归属
+            <tspan x={r(cx - quadR)} dy="-0.6em">
+              BELONGING
+            </tspan>
+            <tspan
+              x={r(cx - quadR)}
+              dy="1.4em"
+              fontFamily="var(--font-body-zh)"
+              letterSpacing="1"
+            >
+              联结/归属
+            </tspan>
           </text>
           <text
             x={r(cx + quadR)}
@@ -239,7 +250,17 @@ export function RadarChart({
             textAnchor="start"
             dominantBaseline="middle"
           >
-            INDEPENDENCE · 独立
+            <tspan x={r(cx + quadR)} dy="-0.6em">
+              INDEPENDENCE
+            </tspan>
+            <tspan
+              x={r(cx + quadR)}
+              dy="1.4em"
+              fontFamily="var(--font-body-zh)"
+              letterSpacing="1"
+            >
+              独立/超脱
+            </tspan>
           </text>
         </g>
 

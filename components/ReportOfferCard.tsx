@@ -1,11 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import type { CSSProperties } from "react";
 
 interface Props {
-  /** Access code, used to build the report URL. */
-  code: string;
+  /** True while the three AI artifacts (summary + report + context) are
+   *  still being generated server-side. Card shows a wait state and the
+   *  open-dialog button is hidden. */
+  generating: boolean;
+  /** Open the end-state dialog with download cards + share link. */
+  onOpen: () => void;
 }
 
 /**
@@ -13,11 +16,48 @@ interface Props {
  * `cta: { kind: "report-offer" }`. No border, no background — sits as a
  * special left-aligned moment within the chat scroll, not a popup.
  *
- * The interview is closed at this point: the only path forward is opening
- * the report. Each text node renders both EN and ZH; the i18n CSS classes
- * flip which is visible based on `html[data-language]`.
+ * Two states:
+ *   • generating — "report being prepared, ~5 minutes"
+ *   • ready      — "your portrait is ready" + button to open dialog
+ *
+ * Each text node renders both EN and ZH; the i18n CSS classes flip which
+ * is visible based on `html[data-language]`.
  */
-export function ReportOfferCard({ code }: Props) {
+export function ReportOfferCard({ generating, onOpen }: Props) {
+  if (generating) {
+    return (
+      <div style={wrapStyle}>
+        <div className="i18n-en i18n-block" style={eyebrowStyle}>
+          GENERATING REPORT
+        </div>
+        <div className="i18n-zh i18n-block" style={eyebrowStyle}>
+          报告生成中
+        </div>
+
+        <h3 className="i18n-en i18n-block" style={titleEnStyle}>
+          We&apos;re assembling your portrait.
+        </h3>
+        <h3 className="i18n-zh i18n-block" style={titleZhStyle}>
+          正在为你整理画像。
+        </h3>
+
+        <p className="i18n-en i18n-block" style={bodyEnStyle}>
+          This usually takes about 5 minutes. The window will open
+          automatically once it&apos;s ready.
+        </p>
+        <p className="i18n-zh i18n-block" style={bodyZhStyle}>
+          这一步大约需要 5 分钟。完成后会自动为你打开。
+        </p>
+
+        <div style={pulseRowStyle}>
+          <span style={pulseDotStyle} />
+          <span className="i18n-en i18n-inline">Working…</span>
+          <span className="i18n-zh i18n-inline">处理中…</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={wrapStyle}>
       <div className="i18n-en i18n-block" style={eyebrowStyle}>
@@ -42,10 +82,10 @@ export function ReportOfferCard({ code }: Props) {
       </p>
 
       <div style={actionsStyle}>
-        <Link href={`/${encodeURIComponent(code)}`} style={btnFilledStyle}>
+        <button type="button" onClick={onOpen} style={btnFilledStyle}>
           <span className="i18n-en i18n-inline">Show me the portrait</span>
           <span className="i18n-zh i18n-inline">看我的画像</span>
-        </Link>
+        </button>
       </div>
     </div>
   );
@@ -129,4 +169,25 @@ const btnFilledStyle: CSSProperties = {
   ...btnBaseStyle,
   color: "var(--brand-archetypes-white)",
   background: "var(--brand-archetypes-red)",
+};
+
+const pulseRowStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  marginTop: 18,
+  fontFamily: "var(--font-framework)",
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.2em",
+  textTransform: "uppercase",
+  color: "var(--brand-archetypes-gray-500)",
+};
+
+const pulseDotStyle: CSSProperties = {
+  width: 6,
+  height: 6,
+  borderRadius: "50%",
+  background: "var(--brand-archetypes-red)",
+  animation: "report-card-pulse 1.4s ease-in-out infinite",
 };

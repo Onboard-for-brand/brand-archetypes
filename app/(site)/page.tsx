@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
@@ -28,7 +27,6 @@ export default function Home() {
   const accessInputRef = useRef<HTMLInputElement>(null);
   const entryTransitionTimerRef = useRef<number | null>(null);
   const lenis = useLenis();
-  const router = useRouter();
   const [testEntryState, setTestEntryState] =
     useState<TestEntryState>("idle");
   const [accessCode, setAccessCode] = useState("");
@@ -662,13 +660,6 @@ export default function Home() {
     setIsVerifying(false);
 
     if (!result.ok) {
-      // Already-completed codes go straight to their archive page instead
-      // of surfacing as an error — the user has a finished report waiting.
-      if (result.error === "completed") {
-        const formatted = formatAccessCode(accessCode);
-        router.push(`/${formatted}`);
-        return;
-      }
       setAccessCode(formatAccessCode(accessCode));
       setAccessError(result.error);
       return;

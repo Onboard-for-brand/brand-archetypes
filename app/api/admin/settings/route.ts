@@ -12,7 +12,10 @@ const patchSchema = z.object({
     .string()
     .min(1)
     .max(120)
-    .regex(/^anthropic\//, "Only anthropic/* models are allowed"),
+    .regex(
+      /^[a-z0-9._\-/]+$/i,
+      "Model id must be a slug (letters, numbers, dot, dash, underscore, slash)",
+    ),
 });
 
 export async function PATCH(req: Request) {

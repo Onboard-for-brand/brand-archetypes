@@ -2072,6 +2072,35 @@ html.is-cta-header-hidden .site-dynamic-header {
     line-height: 1.45;
 }
 
+.end-dialog-share-url {
+    color: var(--brand-archetypes-gray-700);
+    font-family: var(--font-framework);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    transition: color 160ms ease;
+}
+
+.end-dialog-share-url:hover,
+.end-dialog-share-url:focus-visible {
+    color: var(--brand-archetypes-red);
+    outline: none;
+}
+
+@keyframes report-card-pulse {
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(0.85);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 .report-portrait__composition-zh {
     display: block;
     margin-top: var(--space-1);

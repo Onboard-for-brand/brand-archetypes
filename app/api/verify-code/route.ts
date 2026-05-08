@@ -31,8 +31,10 @@ export async function POST(req: Request) {
 
   if (!row) return fail("unknown");
   if (row.status === "revoked") return fail("revoked");
-  if (row.status === "completed") return fail("completed");
 
+  // `completed` codes are allowed back into the chat overlay — the
+  // InterviewOverlay sees the cta in resumed messages and auto-opens the
+  // end-state dialog instead of letting them type.
   if (row.status === "issued") {
     await db
       .update(accessCodes)

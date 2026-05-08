@@ -55,22 +55,62 @@ export async function markCodeCompleted(code: string): Promise<void> {
     .where(eq(accessCodes.code, code));
 
   const [row] = await db
-    .select({ brandSummary: sessions.brandSummary })
+    .select({
+      brandSummary: sessions.brandSummary,
+      reportMd: sessions.reportMd,
+      contextMd: sessions.contextMd,
+    })
     .from(sessions)
     .where(eq(sessions.code, code));
-  if (!row || row.brandSummary) return;
+  if (!row) return;
 
-  // Lazy import to avoid pulling the AI SDK into request paths that don't
-  // need it. The cyclic-looking dependency is fine — summarize.ts only
-  // reads, never writes back through persistence.
-  const { generateBrandSummary } = await import("./summarize");
-  const summary = await generateBrandSummary(code);
-  if (!summary) return;
+  // Generate the three artifacts in parallel — each is independent. Skip
+  // anything already populated so retries / admin re-flips are cheap.
+  const { generateBrandSummary, generateBrandReport, generateAiContext } =
+    await import("./summarize");
 
-  await db
-    .update(sessions)
-    .set({ brandSummary: summary, updatedAt: sql`now()` })
-    .where(eq(sessions.code, code));
+  const tasks: Promise<void>[] = [];
+
+  if (!row.brandSummary) {
+    tasks.push(
+      (async () => {
+        const summary = await generateBrandSummary(code);
+        if (!summary) return;
+        await db
+          .update(sessions)
+          .set({ brandSummary: summary, updatedAt: sql`now()` })
+          .where(eq(sessions.code, code));
+      })(),
+    );
+  }
+
+  if (!row.reportMd) {
+    tasks.push(
+      (async () => {
+        const md = await generateBrandReport(code);
+        if (!md) return;
+        await db
+          .update(sessions)
+          .set({ reportMd: md, updatedAt: sql`now()` })
+          .where(eq(sessions.code, code));
+      })(),
+    );
+  }
+
+  if (!row.contextMd) {
+    tasks.push(
+      (async () => {
+        const md = await generateAiContext(code);
+        if (!md) return;
+        await db
+          .update(sessions)
+          .set({ contextMd: md, updatedAt: sql`now()` })
+          .where(eq(sessions.code, code));
+      })(),
+    );
+  }
+
+  await Promise.all(tasks);
 }
 
 /**

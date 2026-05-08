@@ -5,6 +5,12 @@ import { db } from "@/db/client";
 import { accessCodes } from "@/db/schema";
 import { markCodeCompleted } from "@/lib/ai/persistence";
 
+export const runtime = "nodejs";
+// markCodeCompleted runs three parallel AI generations (summary + report +
+// context). Each can take ~10-20s on Opus; bumping the limit prevents the
+// admin PATCH from being killed mid-generation.
+export const maxDuration = 90;
+
 const codeFormat = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
 const patchSchema = z.object({

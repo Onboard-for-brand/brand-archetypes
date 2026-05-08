@@ -11,6 +11,7 @@ import {
 import gsap from "gsap";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
+import { EndStateDialog } from "@/components/EndStateDialog";
 import { RadarChart } from "@/components/RadarChart";
 import { ReportOfferCard } from "@/components/ReportOfferCard";
 import { useRadarSession } from "@/hooks/useRadarSession";
@@ -30,6 +31,7 @@ interface ResumeMessage {
 interface ResumePayload {
   code: string;
   exists: boolean;
+  status: "issued" | "active" | "completed" | "revoked" | null;
   radarState: {
     archetypeScores: Record<ArchetypeId, number>;
     primaryId: ArchetypeId | null;
@@ -39,6 +41,9 @@ interface ResumePayload {
   mode: string | null;
   nextQuestionKey: string;
   nativeLanguage: string | null;
+  brandSummary: string | null;
+  reportMd: string | null;
+  contextMd: string | null;
   messages: ResumeMessage[];
 }
 
@@ -93,6 +98,20 @@ export function InterviewOverlay({ code }: Props) {
   // Resume hydration state — flips to `true` once the resume fetch resolves.
   const [resumed, setResumed] = useState(false);
 
+  // Brand summary loaded during resume + dialog open state. Dialog auto-opens
+  // the first time we detect the interview is closed (status === completed
+  // OR cta in any assistant message — covers both manually-flipped codes and
+  // freshly-finished sessions). After dismissal the user can re-open via the
+  // cta card button.
+  const [brandSummary, setBrandSummary] = useState<string | null>(null);
+  const [reportMd, setReportMd] = useState<string | null>(null);
+  const [contextMd, setContextMd] = useState<string | null>(null);
+  const [codeStatus, setCodeStatus] = useState<
+    "issued" | "active" | "completed" | "revoked" | null
+  >(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const dialogAutoOpenedRef = useRef(false);
+
   // Debug — top-right panel for overriding individual archetype scores live.
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugScores, setDebugScores] = useState<
@@ -144,9 +163,12 @@ export function InterviewOverlay({ code }: Props) {
   const isStreaming =
     chat.status === "streaming" || chat.status === "submitted";
 
-  // Q42 has been answered once any assistant turn carries a report-offer cta.
-  // From that point: input is locked, the only path forward is the card.
-  const interviewClosed = chat.messages.some((m) => {
+  // Interview is closed when EITHER:
+  //   • access code status is `completed` (set by AI cta or admin override), OR
+  //   • any assistant message carries a report-offer cta (covers the moment
+  //     between the AI emitting cta and the server status flip landing)
+  // Once closed: input locks, only path forward is the dialog.
+  const ctaInMessages = chat.messages.some((m) => {
     if (m.role !== "assistant") return false;
     for (const part of m.parts) {
       if (part.type !== "tool-emitTurnAnalysis") continue;
@@ -158,6 +180,64 @@ export function InterviewOverlay({ code }: Props) {
     }
     return false;
   });
+  const interviewClosed = codeStatus === "completed" || ctaInMessages;
+
+  // Three artifacts come from the server (generated in parallel right after
+  // markCodeCompleted). The dialog only auto-opens once ALL three have
+  // landed, so the user never sees a half-empty modal.
+  const artifactsReady = Boolean(brandSummary && reportMd && contextMd);
+
+  // Auto-open the end-state dialog the first time we detect the interview
+  // is closed AND artifacts are ready. Covers both fresh Q42 finishes
+  // (after polling sees the artifacts arrive) and resumed already-completed
+  // sessions (where resume immediately returns all three).
+  useEffect(() => {
+    if (!resumed) return;
+    if (!interviewClosed) return;
+    if (!artifactsReady) return;
+    if (dialogAutoOpenedRef.current) return;
+    dialogAutoOpenedRef.current = true;
+    setDialogOpen(true);
+  }, [resumed, interviewClosed, artifactsReady]);
+
+  // While the interview is closed but artifacts are still being generated,
+  // poll the resume endpoint every 6s for fresh state. Stops the moment
+  // all three artifacts have landed.
+  useEffect(() => {
+    if (!resumed) return;
+    if (!interviewClosed) return;
+    if (artifactsReady) return;
+
+    let cancelled = false;
+    const interval = window.setInterval(async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch(
+          `/api/interview/session?code=${encodeURIComponent(code)}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return;
+        const data = (await res.json()) as ResumePayload;
+        if (cancelled) return;
+        if (data.brandSummary && brandSummary !== data.brandSummary) {
+          setBrandSummary(data.brandSummary);
+        }
+        if (data.reportMd && reportMd !== data.reportMd) {
+          setReportMd(data.reportMd);
+        }
+        if (data.contextMd && contextMd !== data.contextMd) {
+          setContextMd(data.contextMd);
+        }
+      } catch {
+        // network blip — try again on next tick
+      }
+    }, 6000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [resumed, interviewClosed, artifactsReady, code, brandSummary, reportMd, contextMd]);
 
   // Auto-scroll on AI replies — anchor the previous USER message's "YOU"
   // marker to the top of the chat viewport (with the 4px scroll-margin).
@@ -263,6 +343,8 @@ export function InterviewOverlay({ code }: Props) {
         const data = (await res.json()) as ResumePayload;
         if (cancelled) return;
 
+        setCodeStatus(data.status);
+
         if (data.exists) {
           sessionRef.current.hydrate({
             archetypeScores: data.radarState.archetypeScores,
@@ -270,6 +352,10 @@ export function InterviewOverlay({ code }: Props) {
             journeyPosition: data.radarState.journeyPosition,
             internalStructure: data.radarState.internalStructure,
           });
+
+          setBrandSummary(data.brandSummary ?? null);
+          setReportMd(data.reportMd ?? null);
+          setContextMd(data.contextMd ?? null);
 
           if (data.messages.length > 0) {
             setMessages(data.messages.map(resumeMessageToUI));
@@ -425,7 +511,12 @@ export function InterviewOverlay({ code }: Props) {
               </p>
             ) : (
               chat.messages.map((m) => (
-                <MessageBlock key={m.id} message={m} code={code} />
+                <MessageBlock
+                  key={m.id}
+                  message={m}
+                  artifactsReady={artifactsReady}
+                  onOpenDialog={() => setDialogOpen(true)}
+                />
               ))
             )}
             {chat.error ? (
@@ -440,6 +531,26 @@ export function InterviewOverlay({ code }: Props) {
               >
                 ERROR · {chat.error.message}
               </p>
+            ) : null}
+            {interviewClosed && !ctaInMessages ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div
+                  style={{
+                    fontFamily: "var(--font-framework)",
+                    fontSize: 9,
+                    letterSpacing: 2,
+                    color: "var(--brand-archetypes-gray-500)",
+                  }}
+                >
+                  AI
+                </div>
+                <ReportOfferCard
+                  generating={!artifactsReady}
+                  onOpen={
+                    artifactsReady ? () => setDialogOpen(true) : () => {}
+                  }
+                />
+              </div>
             ) : null}
           </div>
         </section>
@@ -550,6 +661,35 @@ export function InterviewOverlay({ code }: Props) {
           onChange={setDebugScores}
         />
       ) : null}
+
+      <EndStateDialog
+        open={dialogOpen}
+        code={code}
+        brandSummary={brandSummary}
+        reportMd={reportMd}
+        contextMd={contextMd}
+        turns={chat.messages.map((m) => {
+          const text = m.parts
+            .filter(
+              (p): p is { type: "text"; text: string } => p.type === "text",
+            )
+            .map((p) => p.text)
+            .join("");
+          let analysis: TurnAnalysis | null = null;
+          for (const part of m.parts) {
+            if (part.type !== "tool-emitTurnAnalysis") continue;
+            const p = part as { type: string; input?: unknown };
+            if (p.input && typeof p.input === "object") {
+              analysis = p.input as TurnAnalysis;
+            }
+          }
+          return {
+            role: m.role as "user" | "assistant",
+            text,
+            analysis,
+          };
+        })}
+      />
     </div>
   );
 }
@@ -695,10 +835,15 @@ interface AnalysisPayload {
 
 interface MessageBlockProps {
   message: UIMessage;
-  code: string;
+  artifactsReady: boolean;
+  onOpenDialog: () => void;
 }
 
-function MessageBlock({ message, code }: MessageBlockProps) {
+function MessageBlock({
+  message,
+  artifactsReady,
+  onOpenDialog,
+}: MessageBlockProps) {
   const isUser = message.role === "user";
 
   const text = message.parts
@@ -790,7 +935,12 @@ function MessageBlock({ message, code }: MessageBlockProps) {
               {question}
             </div>
           ) : null}
-          {cta ? <ReportOfferCard code={code} /> : null}
+          {cta ? (
+            <ReportOfferCard
+              generating={!artifactsReady}
+              onOpen={artifactsReady ? onOpenDialog : () => {}}
+            />
+          ) : null}
         </>
       )}
     </div>

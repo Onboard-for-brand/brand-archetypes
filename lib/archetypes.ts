@@ -44,7 +44,7 @@ export const archetypes: Archetype[] = [
     nameZh: "统治者",
     quadrant: "Stability / Belonging",
     quadrantTag: "stability-belonging",
-    position: 0,
+    position: 10,
     motto: "Power isn't everything. It's the only thing.",
     desire: "Stability and control",
     fear: "Chaos, being overthrown",
@@ -58,7 +58,7 @@ export const archetypes: Archetype[] = [
     nameZh: "创造者",
     quadrant: "Stability / Independence",
     quadrantTag: "stability-independence",
-    position: 1,
+    position: 11,
     motto: "If it can be imagined, it can be created.",
     desire: "To create things of enduring value",
     fear: "Mediocrity, lack of vision",
@@ -72,7 +72,7 @@ export const archetypes: Archetype[] = [
     nameZh: "纯真者",
     quadrant: "Stability / Independence",
     quadrantTag: "stability-independence",
-    position: 2,
+    position: 0,
     motto: "Free to be you and me.",
     desire: "Paradise, simple goodness",
     fear: "Punishment for doing wrong",
@@ -86,7 +86,7 @@ export const archetypes: Archetype[] = [
     nameZh: "智者",
     quadrant: "Stability / Independence",
     quadrantTag: "stability-independence",
-    position: 3,
+    position: 1,
     motto: "The truth will set you free.",
     desire: "To find truth",
     fear: "Being deceived, ignorance",
@@ -100,7 +100,7 @@ export const archetypes: Archetype[] = [
     nameZh: "探索者",
     quadrant: "Mastery / Independence",
     quadrantTag: "mastery-independence",
-    position: 4,
+    position: 2,
     motto: "Don't fence me in.",
     desire: "Freedom, authentic experience",
     fear: "Being trapped, conformity",
@@ -114,7 +114,7 @@ export const archetypes: Archetype[] = [
     nameZh: "魔术师",
     quadrant: "Mastery / Independence",
     quadrantTag: "mastery-independence",
-    position: 5,
+    position: 4,
     motto: "It can happen.",
     desire: "To understand the laws of the universe",
     fear: "Unintended consequences",
@@ -128,7 +128,7 @@ export const archetypes: Archetype[] = [
     nameZh: "反叛者",
     quadrant: "Mastery / Independence",
     quadrantTag: "mastery-independence",
-    position: 6,
+    position: 3,
     motto: "Rules are meant to be broken.",
     desire: "Liberation, revolution",
     fear: "Powerlessness, irrelevance",
@@ -142,7 +142,7 @@ export const archetypes: Archetype[] = [
     nameZh: "英雄",
     quadrant: "Mastery / Independence",
     quadrantTag: "mastery-independence",
-    position: 7,
+    position: 5,
     motto: "Where there's a will, there's a way.",
     desire: "To prove worth through courageous action",
     fear: "Cowardice, weakness",
@@ -156,7 +156,7 @@ export const archetypes: Archetype[] = [
     nameZh: "乐子人",
     quadrant: "Mastery / Belonging",
     quadrantTag: "mastery-belonging",
-    position: 8,
+    position: 6,
     motto: "You only live once.",
     desire: "To enjoy, to lighten the world",
     fear: "Boredom",
@@ -170,7 +170,7 @@ export const archetypes: Archetype[] = [
     nameZh: "情人",
     quadrant: "Mastery / Belonging",
     quadrantTag: "mastery-belonging",
-    position: 9,
+    position: 7,
     motto: "I only have eyes for you.",
     desire: "Intimacy, sensual experience",
     fear: "Being alone, unloved",
@@ -184,7 +184,7 @@ export const archetypes: Archetype[] = [
     nameZh: "平凡人",
     quadrant: "Stability / Belonging",
     quadrantTag: "stability-belonging",
-    position: 10,
+    position: 8,
     motto: "All people are created equal.",
     desire: "To belong, to connect",
     fear: "Standing out, exclusion",
@@ -198,7 +198,7 @@ export const archetypes: Archetype[] = [
     nameZh: "照顾者",
     quadrant: "Stability / Belonging",
     quadrantTag: "stability-belonging",
-    position: 11,
+    position: 9,
     motto: "Love your neighbor as yourself.",
     desire: "To protect and care for others",
     fear: "Ingratitude, selfishness",
@@ -215,6 +215,11 @@ export const archetypesById: Record<ArchetypeId, Archetype> = Object.fromEntries
 /**
  * Position on a circle, 0-indexed from 12 o'clock, clockwise.
  * Returns SVG-space coordinates (y grows downward).
+ *
+ * The whole ring is rotated 15° clockwise from the cardinal axes — this
+ * pulls Caregiver (pos 9) into the upper half and pushes Rebel (pos 3) into
+ * the lower half, which matches the framework's quadrant intent better than
+ * sitting them on the horizon.
  */
 export function archetypeNodePosition(
   position: number,
@@ -222,7 +227,9 @@ export function archetypeNodePosition(
   cx = 0,
   cy = 0,
 ): { x: number; y: number } {
-  const angle = (position / 12) * 2 * Math.PI - Math.PI / 2;
+  const RING_ROTATION = Math.PI / 12; // 15° clockwise
+  const angle =
+    (position / 12) * 2 * Math.PI - Math.PI / 2 + RING_ROTATION;
   return {
     x: cx + radius * Math.cos(angle),
     y: cy + radius * Math.sin(angle),
