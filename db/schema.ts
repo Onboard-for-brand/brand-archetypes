@@ -136,3 +136,39 @@ export const messages = pgTable(
 
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+
+/**
+ * Append-only application log. Every meaningful AI lifecycle event lands
+ * here — interview-turn streams, end-of-interview artifact generations
+ * (summary / report / context), admin-driven re-runs.
+ *
+ *   • type    — info | warn | error
+ *   • source  — short identifier of the call site (e.g. "summarize.report")
+ *   • code    — access code the event belongs to (nullable for system events)
+ *   • data    — arbitrary jsonb payload; commonly { error: { name, message, stack } }
+ */
+export const logType = pgEnum("log_type", ["info", "warn", "error"]);
+
+export const logs = pgTable(
+  "logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: logType("type").notNull(),
+    source: varchar("source", { length: 64 }).notNull(),
+    code: varchar("code", { length: 14 }),
+    message: text("message").notNull(),
+    data: jsonb("data"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("logs_type_idx").on(table.type),
+    index("logs_source_idx").on(table.source),
+    index("logs_code_idx").on(table.code),
+    index("logs_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export type LogRow = typeof logs.$inferSelect;
+export type NewLog = typeof logs.$inferInsert;

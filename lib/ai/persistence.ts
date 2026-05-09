@@ -64,53 +64,42 @@ export async function markCodeCompleted(code: string): Promise<void> {
     .where(eq(sessions.code, code));
   if (!row) return;
 
-  // Generate the three artifacts in parallel — each is independent. Skip
-  // anything already populated so retries / admin re-flips are cheap.
+  // Generate the three artifacts SEQUENTIALLY. Originally fired in parallel
+  // but claudecn.top appears to have low per-key concurrency limits — under
+  // 3 simultaneous calls one would silently fail with an empty error. Skip
+  // anything already populated so retries / admin re-flips stay cheap.
   const { generateBrandSummary, generateBrandReport, generateAiContext } =
     await import("./summarize");
 
-  const tasks: Promise<void>[] = [];
-
   if (!row.brandSummary) {
-    tasks.push(
-      (async () => {
-        const summary = await generateBrandSummary(code);
-        if (!summary) return;
-        await db
-          .update(sessions)
-          .set({ brandSummary: summary, updatedAt: sql`now()` })
-          .where(eq(sessions.code, code));
-      })(),
-    );
+    const summary = await generateBrandSummary(code);
+    if (summary) {
+      await db
+        .update(sessions)
+        .set({ brandSummary: summary, updatedAt: sql`now()` })
+        .where(eq(sessions.code, code));
+    }
   }
 
   if (!row.reportMd) {
-    tasks.push(
-      (async () => {
-        const md = await generateBrandReport(code);
-        if (!md) return;
-        await db
-          .update(sessions)
-          .set({ reportMd: md, updatedAt: sql`now()` })
-          .where(eq(sessions.code, code));
-      })(),
-    );
+    const md = await generateBrandReport(code);
+    if (md) {
+      await db
+        .update(sessions)
+        .set({ reportMd: md, updatedAt: sql`now()` })
+        .where(eq(sessions.code, code));
+    }
   }
 
   if (!row.contextMd) {
-    tasks.push(
-      (async () => {
-        const md = await generateAiContext(code);
-        if (!md) return;
-        await db
-          .update(sessions)
-          .set({ contextMd: md, updatedAt: sql`now()` })
-          .where(eq(sessions.code, code));
-      })(),
-    );
+    const md = await generateAiContext(code);
+    if (md) {
+      await db
+        .update(sessions)
+        .set({ contextMd: md, updatedAt: sql`now()` })
+        .where(eq(sessions.code, code));
+    }
   }
-
-  await Promise.all(tasks);
 }
 
 /**

@@ -54,7 +54,11 @@ function polygonPoints(
   cx: number,
   cy: number,
 ) {
-  return archetypes
+  // Sort by `position` so polygon edges follow the ring clockwise. Source
+  // declaration order is unrelated to ring order — iterating the raw array
+  // makes edges zigzag across the chart.
+  return [...archetypes]
+    .sort((a, b) => a.position - b.position)
     .map((a) => {
       const score = Math.max(POLYGON_FLOOR, clamp01(scores[a.id] ?? 0));
       const { x, y } = archetypeNodePosition(a.position, score * maxR, cx, cy);

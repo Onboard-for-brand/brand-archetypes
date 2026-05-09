@@ -8,6 +8,7 @@ import {
   writeAssistantTurn,
   writeUserTurn,
 } from "@/lib/ai/persistence";
+import { writeLog, serializeError } from "@/lib/log";
 import { RadarStateSchema } from "@/lib/radar-session";
 import type { TurnAnalysis } from "@/lib/ai/tool-schema";
 
@@ -83,37 +84,80 @@ export async function POST(req: Request) {
   // the entire stream is done.
   let captured: TurnAnalysis | null = null;
 
-  const result = await streamTurn({
+  await writeLog({
+    type: "info",
+    source: "turn.stream",
     code,
-    messages: messages as UIMessage[],
-    radarSnapshot,
-    systemNudge: isKickoff ? KICKOFF_NUDGE : undefined,
-    onAnalysis: async (a) => {
-      captured = a;
-      console.log("[turn] tool fired", {
-        next: a.nextQuestionKey,
-        archetypeDeltas: a.archetypeDeltas,
-      });
-    },
-    onFinish: async ({ text }) => {
-      if (!captured) {
-        console.warn("[turn] stream finished but no tool analysis was captured");
-        return;
-      }
-      try {
-        await writeAssistantTurn({
-          code,
-          seq: assistantSeq,
-          text: text ?? "",
-          analysis: captured,
-        });
-      } catch (err) {
-        console.error("[turn] writeAssistantTurn failed", err);
-      }
-    },
+    message: isKickoff ? "kickoff" : "user-turn",
+    data: { messageCount: messages.length, assistantSeq },
   });
 
-  return result.toUIMessageStreamResponse();
+  let result;
+  try {
+    result = await streamTurn({
+      code,
+      messages: messages as UIMessage[],
+      radarSnapshot,
+      systemNudge: isKickoff ? KICKOFF_NUDGE : undefined,
+      onAnalysis: async (a) => {
+        captured = a;
+      },
+      onFinish: async ({ text }) => {
+        if (!captured) {
+          await writeLog({
+            type: "warn",
+            source: "turn.stream",
+            code,
+            message: "stream finished without tool analysis",
+          });
+          return;
+        }
+        try {
+          await writeAssistantTurn({
+            code,
+            seq: assistantSeq,
+            text: text ?? "",
+            analysis: captured,
+          });
+        } catch (err) {
+          await writeLog({
+            type: "error",
+            source: "turn.persist",
+            code,
+            message: "writeAssistantTurn failed",
+            data: { error: serializeError(err) },
+          });
+        }
+      },
+    });
+  } catch (err) {
+    await writeLog({
+      type: "error",
+      source: "turn.stream",
+      code,
+      message: "streamTurn setup failed",
+      data: { error: serializeError(err) },
+    });
+    return new Response(JSON.stringify({ error: "ai_call_failed" }), {
+      status: 502,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  return result.toUIMessageStreamResponse({
+    onError: (err) => {
+      // Stream-level error from the model provider — log and surface a
+      // generic message back to the client.
+      void writeLog({
+        type: "error",
+        source: "turn.stream",
+        code,
+        message: "stream error",
+        data: { error: serializeError(err) },
+      });
+      return "ai stream failed";
+    },
+  });
 }
 
 function extractLastUserText(messages: UIMessage[]): string {

@@ -7,6 +7,7 @@ import { eq, asc } from "drizzle-orm";
 import { db } from "@/db/client";
 import { messages, sessions } from "@/db/schema";
 import { archetypesById } from "@/lib/archetypes";
+import { writeLog, serializeError } from "@/lib/log";
 import { questionByKey } from "@/lib/questions";
 import type { RadarSnapshot } from "@/lib/radar-session";
 import { getActiveModel } from "@/lib/settings";
@@ -147,19 +148,54 @@ export async function generateBrandSummary(
   const anthropic = makeAnthropic();
   const modelId = await getActiveModel();
 
+  await writeLog({
+    type: "info",
+    source: "summarize.brand-summary",
+    code,
+    message: "start",
+    data: { model: modelId },
+  });
+
   try {
     const result = await generateText({
       model: anthropic(modelId),
       prompt,
+      maxRetries: 1,
+      // Claude Opus 4.7 supports 128K output tokens. Setting explicitly so
+      // any non-canonical model id (e.g. `claude-opus-4-7-1m`) doesn't
+      // fall back to the SDK's 4096 default and silently truncate.
+      maxOutputTokens: 128_000,
     });
     const cleaned = result.text
       .trim()
       .replace(/^["「『”“]+/, "")
       .replace(/["」』”“]+$/, "")
       .trim();
-    return cleaned || null;
+    if (!cleaned) {
+      await writeLog({
+        type: "warn",
+        source: "summarize.brand-summary",
+        code,
+        message: "empty output",
+      });
+      return null;
+    }
+    await writeLog({
+      type: "info",
+      source: "summarize.brand-summary",
+      code,
+      message: "ok",
+      data: { length: cleaned.length },
+    });
+    return cleaned;
   } catch (err) {
-    console.error("[summarize] generateBrandSummary failed", err);
+    await writeLog({
+      type: "error",
+      source: "summarize.brand-summary",
+      code,
+      message: "ai call failed",
+      data: { error: serializeError(err) },
+    });
     return null;
   }
 }
@@ -233,15 +269,50 @@ export async function generateBrandReport(
   const anthropic = makeAnthropic();
   const modelId = await getActiveModel();
 
+  await writeLog({
+    type: "info",
+    source: "summarize.brand-report",
+    code,
+    message: "start",
+    data: { model: modelId },
+  });
+
   try {
     const result = await generateText({
       model: anthropic(modelId),
       prompt,
+      maxRetries: 1,
+      // Claude Opus 4.7 supports 128K output tokens. Setting explicitly so
+      // any non-canonical model id (e.g. `claude-opus-4-7-1m`) doesn't
+      // fall back to the SDK's 4096 default and silently truncate.
+      maxOutputTokens: 128_000,
     });
     const text = result.text.trim();
-    return text || null;
+    if (!text) {
+      await writeLog({
+        type: "warn",
+        source: "summarize.brand-report",
+        code,
+        message: "empty output",
+      });
+      return null;
+    }
+    await writeLog({
+      type: "info",
+      source: "summarize.brand-report",
+      code,
+      message: "ok",
+      data: { length: text.length },
+    });
+    return text;
   } catch (err) {
-    console.error("[summarize] generateBrandReport failed", err);
+    await writeLog({
+      type: "error",
+      source: "summarize.brand-report",
+      code,
+      message: "ai call failed",
+      data: { error: serializeError(err) },
+    });
     return null;
   }
 }
@@ -264,33 +335,25 @@ export async function generateAiContext(
     .map(([id, v]) => `  ${id}: ${v.toFixed(3)}`)
     .join("\n");
 
-  const qaBlock = ctx.qaPairs
-    .map(
-      (p) =>
-        `### ${p.key}\nQ (EN): ${p.en}\nQ (ZH): ${p.zh}\nA: ${p.answer || "_(empty)_"}`,
-    )
-    .join("\n\n");
-
+  // Q&A block is appended deterministically (see below). AI only sees the
+  // FULL transcript for analytical reference; it does not have to echo it.
   const prompt = [
-    "You are producing Document 3 of the Onboarding for Brand framework —",
-    "an AI-Ready Brand Context Profile. The reader is a future LLM (Claude,",
-    "GPT, etc.) that needs to inhabit this brand's voice and judgment when",
-    "generating content.",
+    "You are producing the analytical part of Document 3 — an AI-Ready Brand",
+    "Context Profile. The reader is a future LLM that needs to inhabit this",
+    "brand's voice and judgment when generating content.",
     "",
     `PRIMARY ARCHETYPE: ${ctx.primary ? `${ctx.primary.nameEn} (${ctx.primary.nameZh})` : "undetermined"}`,
     `ARCHETYPE SCORES: ${ctx.sortedScores || "(none)"}`,
     `INTERNAL STRUCTURE (0–4 each): why=${ctx.radar.internalStructure.why.toFixed(1)}, how=${ctx.radar.internalStructure.how.toFixed(1)}, want=${ctx.radar.internalStructure.want.toFixed(1)}`,
     `JOURNEY POSITION (0–1): ${ctx.radar.journeyPosition.toFixed(2)}`,
     "",
-    "FULL Q&A (for your reference — you'll embed all of it verbatim):",
-    qaBlock,
+    "INTERVIEW TRANSCRIPT (for your reference — DO NOT echo back):",
+    ctx.transcript,
     "",
     "---",
     "",
-    `Output a complete markdown document in ${ctx.language} (English headings`,
-    "are fine — but narrative content matches the user's language). Structure:",
-    "",
-    "# Brand Context Profile",
+    `Output ONLY the analytical sections in ${ctx.language} as markdown.`,
+    "Structure exactly:",
     "",
     "## Core Identity",
     "(2-3 sentences capturing the essence — written so an AI immediately knows",
@@ -316,38 +379,110 @@ export async function generateAiContext(
     "## Key Quotes",
     "(4-6 verbatim quotes from the user that capture tone and stance.)",
     "",
-    "## All Archetype Scores",
-    "```yaml",
-    allScores,
-    "```",
-    "",
-    "## Section-by-Section Q&A",
-    "(Embed the FULL Q&A list provided above, verbatim. No summarization.)",
-    "",
-    "## Instructions for AI",
-    "When working within this brand's context:",
-    "1. Use their specific examples — similar structures and references.",
-    "2. Words they refuse — never use them.",
-    "3. Their beliefs — let them inform the angle.",
-    "4. Spirit over letter — internalize the sensibility, do not template-match.",
-    "5. The litmus test: \"Would this brand actually say or do this?\"",
-    "",
-    "Output ONLY the markdown, starting with `# Brand Context Profile`.",
-    "No preamble.",
+    "Output ONLY the markdown sections above (start at `## Core Identity`).",
+    "No preamble. No `# title`. No Q&A — that's appended separately. No",
+    "trailing instructions section — that's appended separately too.",
   ].join("\n");
 
   const anthropic = makeAnthropic();
   const modelId = await getActiveModel();
 
+  await writeLog({
+    type: "info",
+    source: "summarize.ai-context",
+    code,
+    message: "start",
+    data: { model: modelId },
+  });
+
   try {
     const result = await generateText({
       model: anthropic(modelId),
       prompt,
+      maxRetries: 1,
+      // Claude Opus 4.7 supports 128K output tokens. Setting explicitly so
+      // any non-canonical model id (e.g. `claude-opus-4-7-1m`) doesn't
+      // fall back to the SDK's 4096 default and silently truncate.
+      maxOutputTokens: 128_000,
     });
-    const text = result.text.trim();
-    return text || null;
+    const analyticsText = result.text.trim();
+    if (!analyticsText) {
+      await writeLog({
+        type: "warn",
+        source: "summarize.ai-context",
+        code,
+        message: "empty output",
+      });
+      return null;
+    }
+
+    // Stitch: AI's analytical sections + deterministic Q&A + scores +
+    // boilerplate INSTRUCTIONS FOR AI. The Q&A and the trailing instructions
+    // never need AI generation — they're either raw data we already have or
+    // fixed framework guidance.
+    const qaSection = ctx.qaPairs.length
+      ? [
+          "",
+          "## Section-by-Section Q&A",
+          "",
+          ...ctx.qaPairs.map((p) =>
+            [
+              `### ${p.key}`,
+              p.en ? `**Q (EN):** ${p.en}` : "",
+              p.zh ? `**Q (ZH):** ${p.zh}` : "",
+              "",
+              "**A:**",
+              "",
+              p.answer || "_(empty)_",
+              "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          ),
+        ].join("\n")
+      : "";
+
+    const fullDoc = [
+      "# Brand Context Profile",
+      "",
+      analyticsText,
+      "",
+      "## All Archetype Scores",
+      "",
+      "```yaml",
+      allScores,
+      "```",
+      qaSection,
+      "",
+      "## Instructions for AI",
+      "",
+      "When working within this brand's context:",
+      "1. Use their specific examples — similar structures and references.",
+      "2. Words they refuse — never use them.",
+      "3. Their beliefs — let them inform the angle.",
+      "4. Spirit over letter — internalize the sensibility, do not template-match.",
+      `5. The litmus test: "Would this brand actually say or do this?"`,
+      "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    await writeLog({
+      type: "info",
+      source: "summarize.ai-context",
+      code,
+      message: "ok",
+      data: { length: fullDoc.length, aiPart: analyticsText.length },
+    });
+    return fullDoc;
   } catch (err) {
-    console.error("[summarize] generateAiContext failed", err);
+    await writeLog({
+      type: "error",
+      source: "summarize.ai-context",
+      code,
+      message: "ai call failed",
+      data: { error: serializeError(err) },
+    });
     return null;
   }
 }
