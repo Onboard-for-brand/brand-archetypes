@@ -3,6 +3,7 @@ import type { UIMessage } from "ai";
 import { streamTurn } from "@/lib/ai/client";
 import {
   ensureSession,
+  loadLatestMessage,
   loadCodeStatus,
   reserveSeqs,
   writeAssistantTurn,
@@ -21,6 +22,8 @@ const requestSchema = z.object({
   messages: z.array(z.unknown()), // UIMessage[] — not narrowing, AI SDK validates downstream
   radarSnapshot: RadarStateSchema,
   kickoff: z.boolean().optional(),
+  trigger: z.enum(["submit-message", "regenerate-message"]).optional(),
+  messageId: z.string().optional(),
 });
 
 const KICKOFF_NUDGE =
@@ -39,8 +42,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const { code, messages, radarSnapshot, kickoff } = parsed.data;
+  const { code, messages, radarSnapshot, kickoff, trigger } = parsed.data;
   const isKickoff = kickoff === true && messages.length === 0;
+  const isRegenerate = trigger === "regenerate-message";
 
   // Reject turns against codes that no longer accept conversation. Completed
   // codes have already produced the report-offer card — the client locks the
@@ -63,20 +67,29 @@ export async function POST(req: Request) {
     );
   }
 
-  // Ensure a session row exists, then reserve seqs up front. Kickoff turns
-  // skip the user write (no actual user input).
+  // Ensure a session row exists, then reserve seqs up front. Kickoff and
+  // regenerate turns may skip the user write: retrying a failed assistant
+  // response should not append the same user answer twice.
   await ensureSession(code);
-  const reserveCount = isKickoff ? 1 : 2;
+  const lastUserText = isKickoff
+    ? ""
+    : extractLastUserText(messages as UIMessage[]);
+  let shouldWriteUserTurn = !isKickoff && lastUserText.length > 0;
+  if (isRegenerate && shouldWriteUserTurn) {
+    const latest = await loadLatestMessage(code);
+    if (latest?.role === "user" && latest.contentText === lastUserText) {
+      shouldWriteUserTurn = false;
+    }
+  }
+
+  const reserveCount = shouldWriteUserTurn ? 2 : 1;
   const startSeq = await reserveSeqs(code, reserveCount);
-  const userSeq = isKickoff ? null : startSeq;
-  const assistantSeq = isKickoff ? startSeq : startSeq + 1;
+  const userSeq = shouldWriteUserTurn ? startSeq : null;
+  const assistantSeq = shouldWriteUserTurn ? startSeq + 1 : startSeq;
 
   // Persist the user's turn immediately so it survives a stream crash.
   if (!isKickoff && userSeq !== null) {
-    const lastUserText = extractLastUserText(messages as UIMessage[]);
-    if (lastUserText) {
-      await writeUserTurn({ code, seq: userSeq, text: lastUserText });
-    }
+    await writeUserTurn({ code, seq: userSeq, text: lastUserText });
   }
 
   // Capture the AI's structured analysis when the tool call resolves; the
@@ -127,6 +140,7 @@ export async function POST(req: Request) {
             message: "writeAssistantTurn failed",
             data: { error: serializeError(err) },
           });
+          throw err;
         }
       },
     });

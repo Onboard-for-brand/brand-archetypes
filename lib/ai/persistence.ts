@@ -1,6 +1,6 @@
 import "server-only";
 
-import { eq, sql, asc } from "drizzle-orm";
+import { eq, sql, asc, desc } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   accessCodes,
@@ -15,7 +15,7 @@ import {
   radarSnapshot,
   type RadarSnapshot,
 } from "@/lib/radar-session";
-import type { TurnAnalysis } from "./tool-schema";
+import { isQuestionKey, type TurnAnalysis } from "./tool-schema";
 
 export type AccessCodeStatus = AccessCode["status"];
 
@@ -162,35 +162,50 @@ export async function writeAssistantTurn(input: {
   analysis: TurnAnalysis;
 }): Promise<void> {
   const { code, seq, text, analysis } = input;
+  const canonicalQuestionKey = isQuestionKey(analysis.nextQuestionKey)
+    ? analysis.nextQuestionKey
+    : null;
+
+  // If the model ignores the key discipline and emits something like
+  // "CQ-terminology", keep the DB write valid and preserve the prior pointer.
+  let current =
+    canonicalQuestionKey === null ? await loadSessionState(code) : null;
+  if (canonicalQuestionKey === null && !current) {
+    throw new Error(`writeAssistantTurn: no sessions row for ${code}`);
+  }
+
+  const storedQuestionKey =
+    canonicalQuestionKey ?? current?.nextQuestionKey ?? null;
+  const storedAnalysis =
+    storedQuestionKey && storedQuestionKey !== analysis.nextQuestionKey
+      ? { ...analysis, nextQuestionKey: storedQuestionKey }
+      : analysis;
 
   await db.insert(messages).values({
     code,
     seq,
     role: "assistant",
-    contentText: text || analysis.question || "",
-    analysis,
-    questionKey: analysis.nextQuestionKey ?? null,
+    contentText: text || storedAnalysis.question || "",
+    analysis: storedAnalysis,
+    questionKey: storedQuestionKey,
   });
 
   // Pull current state, apply deltas, write back.
-  const [current] = await db
-    .select()
-    .from(sessions)
-    .where(eq(sessions.code, code));
+  current ??= await loadSessionState(code);
   if (!current) {
     throw new Error(`writeAssistantTurn: no sessions row for ${code}`);
   }
 
   const nextRadar = radarSnapshot(
-    applyRadarDeltas(current.radarState as RadarSnapshot, analysis),
+    applyRadarDeltas(current.radarState as RadarSnapshot, storedAnalysis),
   );
 
   // Merge terminology additions into the running registry.
   const mergedTerminology: Record<string, string> = {
     ...(current.terminology ?? {}),
   };
-  if (analysis.terminologyAdditions) {
-    for (const t of analysis.terminologyAdditions) {
+  if (storedAnalysis.terminologyAdditions) {
+    for (const t of storedAnalysis.terminologyAdditions) {
       mergedTerminology[t.term] = t.definition;
     }
   }
@@ -200,9 +215,9 @@ export async function writeAssistantTurn(input: {
     .set({
       radarState: nextRadar,
       terminology: mergedTerminology,
-      mode: analysis.modeUpdate ?? current.mode,
-      nextQuestionKey: analysis.nextQuestionKey ?? current.nextQuestionKey,
-      nativeLanguage: analysis.nativeLanguage ?? current.nativeLanguage,
+      mode: storedAnalysis.modeUpdate ?? current.mode,
+      nextQuestionKey: storedQuestionKey ?? current.nextQuestionKey,
+      nativeLanguage: storedAnalysis.nativeLanguage ?? current.nativeLanguage,
       updatedAt: sql`now()`,
     })
     .where(eq(sessions.code, code));
@@ -210,7 +225,7 @@ export async function writeAssistantTurn(input: {
   // Q42 ended: AI emitted the report-offer card. The interview is closed —
   // any further turn requests against this code will be rejected by the
   // turn route's status guard.
-  if (analysis.cta?.kind === "report-offer") {
+  if (storedAnalysis.cta?.kind === "report-offer") {
     await markCodeCompleted(code);
   }
 }
@@ -230,4 +245,14 @@ export async function loadMessages(code: string, limit = 100): Promise<Message[]
     .where(eq(messages.code, code))
     .orderBy(asc(messages.seq))
     .limit(limit);
+}
+
+export async function loadLatestMessage(code: string): Promise<Message | null> {
+  const [row] = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.code, code))
+    .orderBy(desc(messages.seq))
+    .limit(1);
+  return row ?? null;
 }

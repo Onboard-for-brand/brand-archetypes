@@ -90,8 +90,7 @@ export function InterviewOverlay({ code }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const session = useRadarSession();
-  const sessionRef = useRef(session);
-  sessionRef.current = session;
+  const hydrateSession = session.hydrate;
 
   const [input, setInput] = useState("");
 
@@ -129,13 +128,21 @@ export function InterviewOverlay({ code }: Props) {
     () =>
       new DefaultChatTransport({
         api: "/api/interview/turn",
-        prepareSendMessagesRequest: ({ messages, id }) => ({
+        prepareSendMessagesRequest: ({
+          messages,
+          id,
+          trigger,
+          messageId,
+          body,
+        }) => ({
           body: {
             id,
             code,
             messages,
-            radarSnapshot: sessionRef.current.snapshot(),
+            radarSnapshot: body?.radarSnapshot,
             kickoff: messages.length === 0,
+            trigger,
+            messageId,
           },
         }),
       }),
@@ -155,13 +162,14 @@ export function InterviewOverlay({ code }: Props) {
         rawInput: toolCall.input,
       });
       if (parsed.success) {
-        sessionRef.current.applyDeltas(parsed.data as RadarDeltas);
+        session.applyDeltas(parsed.data as RadarDeltas);
       }
     },
   });
 
   const isStreaming =
     chat.status === "streaming" || chat.status === "submitted";
+  const hasChatError = Boolean(chat.error);
 
   // Interview is closed when EITHER:
   //   • access code status is `completed` (set by AI cta or admin override), OR
@@ -181,6 +189,13 @@ export function InterviewOverlay({ code }: Props) {
     return false;
   });
   const interviewClosed = codeStatus === "completed" || ctaInMessages;
+  const tailMessage = chat.messages[chat.messages.length - 1] ?? null;
+  const hasDanglingUserTurn =
+    resumed &&
+    !isStreaming &&
+    !interviewClosed &&
+    tailMessage?.role === "user";
+  const needsRetry = hasChatError || hasDanglingUserTurn;
 
   // Three artifacts come from the server (generated in parallel right after
   // markCodeCompleted). The dialog only auto-opens once ALL three have
@@ -243,7 +258,7 @@ export function InterviewOverlay({ code }: Props) {
   // marker to the top of the chat viewport (with the 4px scroll-margin).
   // Effect: YOU + user content + AI marker + AI content all visible below.
   // On kickoff (no prior user message) fall back to the AI marker.
-  const lastMessage = chat.messages[chat.messages.length - 1];
+  const lastMessage = tailMessage;
   const lastAssistantId =
     lastMessage && lastMessage.role === "assistant" ? lastMessage.id : null;
   let prevUserIdScan: string | null = null;
@@ -325,7 +340,7 @@ export function InterviewOverlay({ code }: Props) {
       if (t) observer.observe(t);
     }
     return () => observer.disconnect();
-  }, [chat.messages.length, lastAssistantId]);
+  }, [chat.messages, lastAssistantId]);
 
   // Resume on mount: pull the persisted session + message log, hydrate the
   // radar polygon, and reconstruct UIMessages from the DB rows so they show
@@ -346,7 +361,7 @@ export function InterviewOverlay({ code }: Props) {
         setCodeStatus(data.status);
 
         if (data.exists) {
-          sessionRef.current.hydrate({
+          hydrateSession({
             archetypeScores: data.radarState.archetypeScores,
             primaryId: data.radarState.primaryId,
             journeyPosition: data.radarState.journeyPosition,
@@ -370,7 +385,7 @@ export function InterviewOverlay({ code }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [code, setMessages]);
+  }, [code, setMessages, hydrateSession]);
 
   // AI speaks first: only fire after resume is settled and there are no
   // existing messages.
@@ -381,8 +396,10 @@ export function InterviewOverlay({ code }: Props) {
     if (chat.messages.length > 0) return;
     if (chat.status !== "ready") return;
     kickedOffRef.current = true;
-    chat.sendMessage();
-  }, [chat, resumed]);
+    chat.sendMessage(undefined, {
+      body: { radarSnapshot: session.snapshot() },
+    });
+  }, [chat, resumed, session]);
 
   // Entry slide-in animation.
   useIsoLayoutEffect(() => {
@@ -422,9 +439,24 @@ export function InterviewOverlay({ code }: Props) {
 
   function submit() {
     const text = input.trim();
-    if (!text || isStreaming || interviewClosed) return;
+    if (!text || isStreaming || interviewClosed || needsRetry) return;
     setInput("");
-    chat.sendMessage({ text });
+    chat.sendMessage(
+      { text },
+      { body: { radarSnapshot: session.snapshot() } },
+    );
+  }
+
+  function retryLastTurn() {
+    if (isStreaming) return;
+    chat.clearError();
+    if (chat.messages.length === 0) {
+      void chat.sendMessage(undefined, {
+        body: { radarSnapshot: session.snapshot() },
+      });
+      return;
+    }
+    void chat.regenerate({ body: { radarSnapshot: session.snapshot() } });
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -519,18 +551,41 @@ export function InterviewOverlay({ code }: Props) {
                 />
               ))
             )}
-            {chat.error ? (
-              <p
+            {needsRetry ? (
+              <div
+                role="alert"
                 style={{
-                  margin: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  borderTop: "1px solid var(--brand-archetypes-gray-200)",
+                  padding: "14px 0 4px",
                   fontFamily: "var(--font-framework)",
                   fontSize: 11,
                   letterSpacing: 1,
                   color: "var(--brand-archetypes-red)",
                 }}
               >
-                ERROR · {chat.error.message}
-              </p>
+                <span>AI RESPONSE FAILED</span>
+                <button
+                  type="button"
+                  onClick={retryLastTurn}
+                  disabled={isStreaming}
+                  style={{
+                    border: "1px solid var(--brand-archetypes-red)",
+                    background: "transparent",
+                    color: "var(--brand-archetypes-red)",
+                    padding: "7px 12px",
+                    cursor: isStreaming ? "wait" : "pointer",
+                    fontFamily: "var(--font-framework)",
+                    fontSize: 10,
+                    letterSpacing: 1.5,
+                  }}
+                >
+                  RETRY
+                </button>
+              </div>
             ) : null}
             {interviewClosed && !ctaInMessages ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -574,18 +629,24 @@ export function InterviewOverlay({ code }: Props) {
               color: "var(--brand-archetypes-gray-500)",
             }}
           >
-            {interviewClosed ? "INTERVIEW COMPLETE" : "YOUR RESPONSE"}
+            {interviewClosed
+              ? "INTERVIEW COMPLETE"
+              : needsRetry
+                ? "RETRY REQUIRED"
+                : "YOUR RESPONSE"}
           </div>
           <textarea
             name="interview-response"
             placeholder={
               interviewClosed
                 ? "访谈结束 · Interview complete"
+                : needsRetry
+                  ? "上一轮回复失败，请先点击 Retry"
                 : "Type here…"
             }
-            value={interviewClosed ? "" : input}
-            readOnly={interviewClosed}
-            disabled={interviewClosed}
+            value={interviewClosed || needsRetry ? "" : input}
+            readOnly={interviewClosed || needsRetry}
+            disabled={interviewClosed || needsRetry}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             autoComplete="off"
@@ -606,8 +667,8 @@ export function InterviewOverlay({ code }: Props) {
               minHeight: 110,
               background: "transparent",
               color: "var(--brand-archetypes-black)",
-              opacity: interviewClosed ? 0.5 : 1,
-              cursor: interviewClosed ? "not-allowed" : "text",
+              opacity: interviewClosed || needsRetry ? 0.5 : 1,
+              cursor: interviewClosed || needsRetry ? "not-allowed" : "text",
             }}
           />
           <div
@@ -624,11 +685,19 @@ export function InterviewOverlay({ code }: Props) {
             <span>
               {interviewClosed
                 ? "—"
+                : needsRetry
+                  ? "LAST TURN FAILED"
                 : isStreaming
                   ? "STREAMING…"
                   : `${input.length} CHARS`}
             </span>
-            <span>{interviewClosed ? "OPEN REPORT ↑" : "⌘ ENTER · SUBMIT"}</span>
+            <span>
+              {interviewClosed
+                ? "OPEN REPORT ↑"
+                : needsRetry
+                  ? "USE RETRY ABOVE"
+                  : "⌘ ENTER · SUBMIT"}
+            </span>
           </div>
         </section>
       </div>

@@ -641,23 +641,23 @@ function NewCodeDialog({
 }
 
 function RelativeTime({ value }: { value: string | Date }) {
-  const [label, setLabel] = useState(() => formatRelative(value));
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    setLabel(formatRelative(value));
     const id = window.setInterval(() => {
-      setLabel(formatRelative(value));
+      setNow(Date.now());
     }, 60_000);
     return () => window.clearInterval(id);
-  }, [value]);
+  }, []);
 
   const date = new Date(value);
+  const label = formatRelative(value, now);
   return <span title={date.toLocaleString()}>{label}</span>;
 }
 
-function formatRelative(value: string | Date): string {
+function formatRelative(value: string | Date, now = Date.now()): string {
   const date = new Date(value);
-  const diff = Date.now() - date.getTime();
+  const diff = now - date.getTime();
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
