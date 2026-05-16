@@ -69,6 +69,15 @@ export function emptyRadarState(): RadarState {
 const clamp = (n: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, n));
 
+const boundedDeltaSchema = (limit: number) =>
+  z.preprocess(
+    (value) =>
+      typeof value === "number" && Number.isFinite(value)
+        ? clamp(value, -limit, limit)
+        : value,
+    z.number().min(-limit).max(limit),
+  );
+
 /** Top-scoring archetype, or null if every score is 0. */
 export function pickPrimary(
   scores: Record<ArchetypeId, number>,
@@ -223,41 +232,22 @@ export const RadarStateSchema = z.object({
 
 /**
  * What the AI tool call `emitTurnAnalysis` provides for the radar.
- * Bounds enforced — out-of-range values are rejected, not silently clamped.
- * Use `clampRadarDeltas()` afterwards if you want to be permissive.
+ * Bounds are enforced permissively: out-of-range model values are clamped
+ * during parsing so one aggressive delta cannot invalidate the whole turn.
  */
 export const RadarDeltasSchema = z.object({
   archetypeDeltas: z
-    .record(
+    .partialRecord(
       ArchetypeIdSchema,
-      z
-        .number()
-        .min(-RADAR_BOUNDS.archetypeDelta)
-        .max(RADAR_BOUNDS.archetypeDelta),
+      boundedDeltaSchema(RADAR_BOUNDS.archetypeDelta),
     )
     .optional(),
-  journeyDelta: z
-    .number()
-    .min(-RADAR_BOUNDS.journeyDelta)
-    .max(RADAR_BOUNDS.journeyDelta)
-    .optional(),
+  journeyDelta: boundedDeltaSchema(RADAR_BOUNDS.journeyDelta).optional(),
   internalStructureDelta: z
     .object({
-      why: z
-        .number()
-        .min(-RADAR_BOUNDS.internalStructureDelta)
-        .max(RADAR_BOUNDS.internalStructureDelta)
-        .optional(),
-      how: z
-        .number()
-        .min(-RADAR_BOUNDS.internalStructureDelta)
-        .max(RADAR_BOUNDS.internalStructureDelta)
-        .optional(),
-      want: z
-        .number()
-        .min(-RADAR_BOUNDS.internalStructureDelta)
-        .max(RADAR_BOUNDS.internalStructureDelta)
-        .optional(),
+      why: boundedDeltaSchema(RADAR_BOUNDS.internalStructureDelta).optional(),
+      how: boundedDeltaSchema(RADAR_BOUNDS.internalStructureDelta).optional(),
+      want: boundedDeltaSchema(RADAR_BOUNDS.internalStructureDelta).optional(),
     })
     .optional(),
 });
